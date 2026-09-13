@@ -1,0 +1,14 @@
+{
+  "_note": "NGƯỜI A sinh file này ở M2 bằng cách lọc từ http://bulk.openweathermap.org/sample/city.list.json.gz",
+  "_target": "~200 điểm: 100 VN + 50 IN + 50 global (để có đa dạng khí hậu/mức ô nhiễm cho phần phân cụm)",
+  "stations": [
+    {"station_id": "VN_HCM_01", "city": "Ho Chi Minh City", "country": "VN", "lat": 10.8231, "lon": 106.6297},
+    {"station_id": "VN_HAN_01", "city": "Hanoi",            "country": "VN", "lat": 21.0278, "lon": 105.8342},
+    {"station_id": "VN_DAD_01", "city": "Da Nang",          "country": "VN", "lat": 16.0544, "lon": 108.2022},
+    {"station_id": "VN_BDU_01", "city": "Thu Dau Mot",      "country": "VN", "lat": 10.9804, "lon": 106.6519},
+    {"station_id": "IN_DEL_01", "city": "New Delhi",        "country": "IN", "lat": 28.6139, "lon": 77.2090},
+    {"station_id": "IN_BOM_01", "city": "Mumbai",           "country": "IN", "lat": 19.0760, "lon": 72.8777},
+    {"station_id": "CN_BJS_01", "city": "Beijing",          "country": "CN", "lat": 39.9042, "lon": 116.4074},
+    {"station_id": "JP_TYO_01", "city": "Tokyo",            "country": "JP", "lat": 35.6762, "lon": 139.6503}
+  ]
+}

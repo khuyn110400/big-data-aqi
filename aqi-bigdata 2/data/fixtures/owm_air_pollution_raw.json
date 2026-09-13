@@ -1,0 +1,131 @@
+{
+  "_NGUON": "RESPONSE THẬT từ OpenWeather, gọi ngày 2026-09-13, toạ độ TP.HCM 10.8231/106.6297",
+  "_MUC_CAN_CU": "ĐÃ KIỂM CHỨNG — đây là dữ liệu thật, không phải dựng sẵn",
+  "_endpoint_current": "GET /data/2.5/air_pollution?lat=&lon=&appid=",
+  "_endpoint_history": "GET /data/2.5/air_pollution/history?lat=&lon=&start=&end=&appid=  (start/end = unix giây UTC)",
+  "_units": "tất cả components là µg/m3",
+  "_main_aqi": "thang 1-5 RIÊNG của OpenWeather (1=Good…5=Very Poor). KHÔNG phải AQI 0-500 của đồ án.",
+  "current_response": {
+    "coord": {
+      "lon": 106.6289,
+      "lat": 10.8238
+    },
+    "list": [
+      {
+        "main": {
+          "aqi": 2
+        },
+        "components": {
+          "co": 302.2,
+          "no": 0,
+          "no2": 5.57,
+          "o3": 43.09,
+          "so2": 1.89,
+          "pm2_5": 10.33,
+          "pm10": 12.97,
+          "nh3": 2.16
+        },
+        "dt": 1789299430
+      }
+    ]
+  },
+  "history_response_5_ban_ghi_dau": {
+    "coord": {
+      "lon": 106.6297,
+      "lat": 10.8231
+    },
+    "list": [
+      {
+        "main": {
+          "aqi": 1
+        },
+        "components": {
+          "co": 182.17,
+          "no": 0.04,
+          "no2": 2.29,
+          "o3": 50.38,
+          "so2": 0.6,
+          "pm2_5": 4.09,
+          "pm10": 5.4,
+          "nh3": 1.62
+        },
+        "dt": 1788692400
+      },
+      {
+        "main": {
+          "aqi": 1
+        },
+        "components": {
+          "co": 194.17,
+          "no": 0,
+          "no2": 2.8,
+          "o3": 47.01,
+          "so2": 0.72,
+          "pm2_5": 4.24,
+          "pm10": 5.89,
+          "nh3": 1.86
+        },
+        "dt": 1788696000
+      },
+      {
+        "main": {
+          "aqi": 1
+        },
+        "components": {
+          "co": 200.88,
+          "no": 0,
+          "no2": 3.02,
+          "o3": 43.8,
+          "so2": 0.81,
+          "pm2_5": 4.43,
+          "pm10": 6.48,
+          "nh3": 2.03
+        },
+        "dt": 1788699600
+      },
+      {
+        "main": {
+          "aqi": 1
+        },
+        "components": {
+          "co": 204.21,
+          "no": 0,
+          "no2": 3.13,
+          "o3": 40.26,
+          "so2": 0.87,
+          "pm2_5": 4.57,
+          "pm10": 6.98,
+          "nh3": 2.1
+        },
+        "dt": 1788703200
+      },
+      {
+        "main": {
+          "aqi": 1
+        },
+        "components": {
+          "co": 204.2,
+          "no": 0,
+          "no2": 3.2,
+          "o3": 36.1,
+          "so2": 0.9,
+          "pm2_5": 4.57,
+          "pm10": 7.29,
+          "nh3": 2.08
+        },
+        "dt": 1788706800
+      }
+    ]
+  },
+  "_PHAT_HIEN_TU_DU_LIEU_THAT": {
+    "1_coord_lech": "Gửi 10.8231/106.6297 → API trả 10.8238/106.6289 (lệch ~78m/87m). BẮT BUỘC dùng lat/lon trong cities.json làm định danh, KHÔNG dùng coord trả về.",
+    "2_dt_current_KHONG_tron_gio": "current dt=1789299430 → 11:37:10 UTC, dư 2230s. CHỈ history mới tròn giờ (145/145). normalize() PHẢI làm tròn xuống giờ cho bản ghi live, nếu không live và history sẽ không khớp key và dedup thất bại.",
+    "3_history_THIEU_GIO_THAT": "Xin 7 ngày (169 giờ) chỉ nhận 145 bản ghi = 85.8%. Có 1 khoảng đứt 25 GIỜ LIỀN (2026-09-07 00:00 → 2026-09-08 01:00). Đây là lỗi thật, không phải giả định. Pha 1 BẮT BUỘC xử lý gap.",
+    "4_khong_trung_khong_null_khong_am": "Trong 146 bản ghi: 0 trùng mốc giờ, 0 giá trị null, 0 giá trị âm. Chưa quan sát thấy — KHÔNG có nghĩa là không bao giờ xảy ra. Pha 1 vẫn nên phòng, nhưng gap mới là vấn đề chính.",
+    "5_bang_breakpoint_1_5_da_kiem_chung": "Bảng {pm2_5:[10,25,50,75], pm10:[20,50,100,200], no2:[40,70,150,200], o3:[60,100,140,180], so2:[20,80,250,350], co:[4400,9400,12400,15400]} + lấy max → khớp 146/146 bản ghi thật (100%).",
+    "6_CHUA_KIEM_CHUNG": "ĐÃ KIỂM CHỨNG 13/09/2026 — xem mục 7.",
+    "7_gioi_han_1_call_history": "Xin 90 ngày (2160 giờ) → API trả 2041 bản ghi phủ ĐỦ 90 ngày, KHÔNG bị cắt. => Backfill chunk theo QUÝ (90 ngày), không cần chunk theo tháng: 21 call/trạm cho 5 năm thay vì 61 → 4.200 call cho 200 trạm (~1,2 giờ) thay vì 12.200 call (~3,4 giờ).",
+    "8_GAP_CO_QUY_LUAT": "QUAN TRỌNG NHẤT. 4 khoảng đứt trong 90 ngày: 24h, 24h, 48h, 24h — TẤT CẢ là khối NGUYÊN NGÀY và TẤT CẢ bắt đầu đúng 01:00 UTC. Không có giờ lẻ nào thiếu. => Không phải nhiễu ngẫu nhiên mà là NGÀY DỮ LIỆU BỊ MẤT CẢ KHỐI. Pha 1 KHÔNG được nội suy qua khoảng 24h; phải đánh dấu ngày đó thiếu dữ liệu và loại khỏi AQI ngày. Tỉ lệ đầy đủ: 94,4% trên 90 ngày (mẫu 7 ngày cho 85,8% vì rơi trúng đúng 1 gap).",
+    "9_7_ngay_khong_du_de_hieu_chinh": "pm2_5 max: 7 ngày = 10,1 nhưng 90 ngày = 112,9 (rộng gấp 11 lần). co max: 385 vs 2414. Cửa sổ 7 ngày rơi vào mùa mưa không khí sạch. Mọi hiệu chỉnh phân phối phải dùng 90 ngày."
+  }
+}

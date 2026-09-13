@@ -1,0 +1,34 @@
+# NGƯỜI A · M1
+# Phiên bản service theo Bảng 1 của "Thiết kế hệ thống v1".
+# TODO(A): điền đầy đủ. Dựng TỪNG service một và test xong mới thêm service tiếp theo
+#          (theo đúng Bảng 5 - thứ tự cài đặt). Đừng viết cả file rồi up một lần.
+#
+# Thứ tự dựng: kafka -> hdfs -> spark -> zookeeper -> hbase -> grafana
+#
+# Lưu ý WSL2: cấp tối thiểu 10GB RAM trong C:\Users\<user>\.wslconfig
+#             nếu không HBase RegionServer sẽ chết ngẫu nhiên.
+
+name: aqi-bigdata
+
+services:
+  # --- Kafka (KRaft, single node) -------------------------------------------
+  # broker:19092 cho container, localhost:9092 cho host
+  # TODO(A)
+
+  # --- HDFS -----------------------------------------------------------------
+  # namenode:9000, web UI 9870
+  # TODO(A)
+
+  # --- Spark master/worker --------------------------------------------------
+  # TODO(A)
+
+  # --- ZooKeeper + HBase ----------------------------------------------------
+  # TODO(A)
+
+  # --- Grafana --------------------------------------------------------------
+  # localhost:3000, cần plugin yesoreyeram-infinity-datasource để đọc JSON API
+  # TODO(A)
+
+networks:
+  default:
+    name: aqi-net

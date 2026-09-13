@@ -1,0 +1,25 @@
+{
+  "_source": "US EPA AQI breakpoints (40 CFR Part 58 Appendix G). PM2.5 breakpoints đã được EPA sửa năm 2024.",
+  "_WARNING": "ĐỐI CHIẾU LẠI VỚI airnow.gov / EPA technical assistance document trước khi dùng cho báo cáo.",
+  "_unit": "µg/m3 cho PM. CO/SO2/NO2/O3 bảng gốc EPA dùng ppm/ppb -> PHẢI QUY ĐỔI từ µg/m3 của OpenWeather trước khi tra bảng. Chưa làm quy đổi -> chỉ dùng chuẩn này cho PM2.5/PM10.",
+  "_status": "PHỤ - chuẩn chính của đồ án là VN_1459. File này chỉ để so sánh trong báo cáo.",
+
+  "aqi_breakpoints": [
+    {"i_low": 0,   "i_high": 50,  "level": 1, "label": "Good"},
+    {"i_low": 51,  "i_high": 100, "level": 2, "label": "Moderate"},
+    {"i_low": 101, "i_high": 150, "level": 3, "label": "Unhealthy for Sensitive Groups"},
+    {"i_low": 151, "i_high": 200, "level": 4, "label": "Unhealthy"},
+    {"i_low": 201, "i_high": 300, "level": 5, "label": "Very Unhealthy"},
+    {"i_low": 301, "i_high": 500, "level": 6, "label": "Hazardous"}
+  ],
+
+  "pollutants": {
+    "pm2_5": {"window": "24h", "bp": [0.0, 9.0, 35.4, 55.4, 125.4, 225.4, 325.4]},
+    "pm10":  {"window": "24h", "bp": [0, 54, 154, 254, 354, 424, 604]},
+    "o3":    {"window": "8h",  "bp": [0, 108, 140, 170, 210, 400, 600], "_todo": "cần quy đổi ppb->µg/m3 cho đúng"},
+    "no2":   {"window": "1h",  "bp": [0, 100, 189, 677, 1221, 2349, 3853], "_todo": "kiểm tra quy đổi"},
+    "so2":   {"window": "1h",  "bp": [0, 92, 197, 484, 797, 1583, 2631], "_todo": "kiểm tra quy đổi"},
+    "co":    {"window": "8h",  "bp": [0, 5038, 10763, 14198, 17633, 34694, 57708], "_todo": "kiểm tra quy đổi"}
+  },
+  "_bp_format": "bp[i] -> bp[i+1] ánh xạ sang aqi_breakpoints[i]."
+}

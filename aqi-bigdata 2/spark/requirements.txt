@@ -1,0 +1,5 @@
+pyspark==3.5.9
+pytest>=8.0
+pandas>=2.2
+pyarrow>=17.0
+happybase>=1.2
