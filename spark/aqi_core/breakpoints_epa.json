@@ -5,6 +5,16 @@
   "_status": "PHỤ - chuẩn chính của đồ án là VN_1459. File này chỉ để so sánh trong báo cáo.",
 
   "aqi_breakpoints": [
+    {"i_low": 0,   "i_high": 50},
+    {"i_low": 51,  "i_high": 100},
+    {"i_low": 101, "i_high": 150},
+    {"i_low": 151, "i_high": 200},
+    {"i_low": 201, "i_high": 300},
+    {"i_low": 301, "i_high": 500}
+  ],
+  "_aqi_breakpoints_note": "Dùng để nội suy IAQI. Không có label — xem 'level_labels'.",
+
+  "level_labels": [
     {"i_low": 0,   "i_high": 50,  "level": 1, "label": "Good"},
     {"i_low": 51,  "i_high": 100, "level": 2, "label": "Moderate"},
     {"i_low": 101, "i_high": 150, "level": 3, "label": "Unhealthy for Sensitive Groups"},
