@@ -1,33 +1,207 @@
 # NGƯỜI A · M1
 # Phiên bản service theo Bảng 1 của "Thiết kế hệ thống v1".
-# TODO(A): điền đầy đủ. Dựng TỪNG service một và test xong mới thêm service tiếp theo
-#          (theo đúng Bảng 5 - thứ tự cài đặt). Đừng viết cả file rồi up một lần.
 #
 # Thứ tự dựng: kafka -> hdfs -> spark -> zookeeper -> hbase -> grafana
+# Dựng TỪNG service một và test xong mới thêm service tiếp theo (theo đúng Bảng 5 -
+# thứ tự cài đặt). Đừng viết cả file rồi up một lần — 6 lỗi cùng lúc không biết lỗi
+# nào gây ra lỗi nào.
+#
+#   docker compose up -d kafka                 && docker exec -it kafka kafka-topics.sh --version
+#   docker compose up -d namenode datanode      && bash ../scripts/02_init_hdfs.sh
+#   docker compose up -d spark-master spark-worker
+#   docker compose up -d zookeeper
+#   docker compose up -d hbase-master hbase-regionserver && bash ../scripts/03_init_hbase.sh
+#   docker compose up -d grafana
 #
 # Lưu ý WSL2: cấp tối thiểu 10GB RAM trong C:\Users\<user>\.wslconfig
 #             nếu không HBase RegionServer sẽ chết ngẫu nhiên.
+# Trên Apple Silicon: đọc docs/ARM64-APPLE-SILICON.md trước khi đụng file này.
 
 name: aqi-bigdata
+
+x-hadoop-env: &hadoop-env
+  CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+  CORE_CONF_hadoop_http_staticuser_user: root
+  HDFS_CONF_dfs_webhdfs_enabled: "true"
+  HDFS_CONF_dfs_permissions_enabled: "false"
+  HDFS_CONF_dfs_replication: "1"
+  HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check: "false"
 
 services:
   # --- Kafka (KRaft, single node) -------------------------------------------
   # broker:19092 cho container, localhost:9092 cho host
-  # TODO(A)
+  # Kiểm tra: docker exec -it kafka kafka-topics.sh --list --bootstrap-server localhost:9092
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://kafka:19092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Image mặc định ghi log vào /tmp/kraft-combined-logs (KHÔNG persist) — phải trỏ
+      # tường minh sang thư mục có mount volume, không thì mất hết topic khi container bị recreate.
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      # Dùng nc kiểm tra cổng TCP thay vì kafka-broker-api-versions.sh — script đó tự khởi
+      # một JVM riêng mỗi lần gọi, dưới tải I/O nặng (vd. đang pull image khác) JVM cold-start
+      # có thể mất >20s và làm healthcheck báo unhealthy giả dù broker vẫn chạy tốt.
+      test: ["CMD", "nc", "-z", "localhost", "9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   # --- HDFS -----------------------------------------------------------------
   # namenode:9000, web UI 9870
-  # TODO(A)
+  # Kiểm tra: mở http://localhost:9870 , hoặc docker exec -it namenode hdfs dfsadmin -report
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    restart: unless-stopped
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    environment:
+      <<: *hadoop-env
+      CLUSTER_NAME: aqi-bigdata
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+    healthcheck:
+      # timeout rộng vì lúc cả stack (9 container) cùng khởi động, máy bị nghẽn I/O/CPU
+      # nặng — đã đo được 1 lệnh curl nội bộ mất >15s dù NameNode đã lên hẳn.
+      test: ["CMD", "curl", "-f", "http://localhost:9870"]
+      interval: 10s
+      timeout: 25s
+      retries: 10
+      start_period: 30s
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    restart: unless-stopped
+    ports:
+      - "9864:9864"
+    environment:
+      <<: *hadoop-env
+      SERVICE_PRECONDITION: "namenode:9870"
+    volumes:
+      - datanode-data:/hadoop/dfs/data
+    depends_on:
+      namenode:
+        condition: service_healthy
 
   # --- Spark master/worker --------------------------------------------------
-  # TODO(A)
+  # master UI 8080, worker UI 8081, master URL spark://spark-master:7077
+  # Kiểm tra: mở http://localhost:8080 , phải thấy 1 worker ALIVE
+  spark-master:
+    # bitnami/spark rolling tags đã chuyển sang org bitnamilegacy (bitnami/* giờ chỉ còn
+    # tag ghim phiên bản đầy đủ, cần tài khoản). Đã kiểm chứng bitnamilegacy/spark:3.5 tồn tại.
+    image: bitnamilegacy/spark:3.5
+    container_name: spark-master
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      SPARK_MODE: master
+
+  spark-worker:
+    image: bitnamilegacy/spark:3.5
+    container_name: spark-worker
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    depends_on:
+      - spark-master
 
   # --- ZooKeeper + HBase ----------------------------------------------------
-  # TODO(A)
+  # ZooKeeper riêng cho HBase (khác hẳn KRaft controller của Kafka ở trên).
+  # Kiểm tra: docker exec -it zookeeper zkServer.sh status
+  zookeeper:
+    image: zookeeper:3.8
+    container_name: zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_MY_ID: 1
+
+  # HBase 1.2.6: image cũ nhưng ổn định, tested chung với bde2020 hadoop stack.
+  # KHÔNG dùng COMPRESSION => 'SNAPPY' ở scripts/03_init_hbase.sh (xem docs/ARM64-APPLE-SILICON.md
+  # §"Hai chỗ phải sửa" — vấn đề native lib không chỉ riêng arm64, dùng GZ hoặc NONE cho an toàn).
+  # Kiểm tra: mở http://localhost:16010 , hoặc docker exec -it hbase-master hbase shell <<< "status"
+  hbase-master:
+    image: bde2020/hbase-master:1.0.0-hbase1.2.6
+    container_name: hbase-master
+    restart: unless-stopped
+    ports:
+      - "16010:16010"
+      - "16000:16000"
+    environment:
+      <<: *hadoop-env
+      HBASE_CONF_hbase_rootdir: hdfs://namenode:9000/hbase
+      HBASE_CONF_hbase_cluster_distributed: "true"
+      HBASE_CONF_hbase_zookeeper_quorum: zookeeper
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 zookeeper:2181"
+    depends_on:
+      namenode:
+        condition: service_healthy
+      zookeeper:
+        condition: service_started
+
+  hbase-regionserver:
+    image: bde2020/hbase-regionserver:1.0.0-hbase1.2.6
+    container_name: hbase-regionserver
+    restart: unless-stopped
+    ports:
+      - "16030:16030"
+    environment:
+      <<: *hadoop-env
+      HBASE_CONF_hbase_rootdir: hdfs://namenode:9000/hbase
+      HBASE_CONF_hbase_cluster_distributed: "true"
+      HBASE_CONF_hbase_zookeeper_quorum: zookeeper
+      HBASE_CONF_hbase_regionserver_hostname: hbase-regionserver
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 zookeeper:2181 hbase-master:16010"
+    depends_on:
+      - hbase-master
 
   # --- Grafana --------------------------------------------------------------
   # localhost:3000, cần plugin yesoreyeram-infinity-datasource để đọc JSON API
-  # TODO(A)
+  # Login mặc định admin/admin (đổi ở lần đăng nhập đầu). Datasource trỏ vào
+  # http://host.docker.internal:8000 (FastAPI của serving/app/main.py chạy trên host).
+  grafana:
+    image: grafana/grafana-oss:11.1.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  kafka-data:
+  namenode-data:
+  datanode-data:
+  grafana-data:
 
 networks:
   default:
