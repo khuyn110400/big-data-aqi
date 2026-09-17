@@ -116,6 +116,8 @@ services:
       - "7077:7077"
     environment:
       SPARK_MODE: master
+      HOME: /tmp
+      JAVA_TOOL_OPTIONS: "-Duser.home=/tmp"
 
   spark-worker:
     image: bitnamilegacy/spark:3.5
@@ -128,6 +130,8 @@ services:
       SPARK_MASTER_URL: spark://spark-master:7077
       SPARK_WORKER_MEMORY: 2G
       SPARK_WORKER_CORES: 2
+      HOME: /tmp
+      JAVA_TOOL_OPTIONS: "-Duser.home=/tmp"
     depends_on:
       - spark-master
 
