@@ -3,3 +3,7 @@ pytest>=8.0
 pandas>=2.2
 pyarrow>=17.0
 happybase>=1.2
+matplotlib>=3.8
+ipykernel>=6.29
+scikit-learn>=1.4
+nbconvert>=7.16

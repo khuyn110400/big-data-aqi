@@ -1,0 +1,69 @@
+{
+  "_source": "QĐ 1459/QĐ-TCMT (12/11/2019) - Hướng dẫn kỹ thuật tính toán và công bố chỉ số chất lượng không khí Việt Nam (VN_AQI), mục 2.2 và Bảng 2.",
+  "_WARNING": "Đã đối chiếu với toàn văn QĐ 1459/QĐ-TCMT do người dùng cung cấp ngày 2026-09-14 (xem QD1459_QD-TCMT.md). Nếu có bản scan/PDF gốc khác, nên đối chiếu lại 1 lần trước khi dùng cho báo cáo chính thức.",
+  "_unit": "µg/m3 cho tất cả các chất, kể cả CO (Bảng 2 gốc đã ghi CO theo µg/m3, ví dụ mốc 10.000 = 10 mg/m3). OpenWeather trả µg/m3 nên không cần quy đổi thêm.",
+  "_note_avg_window": "VN_AQI phân biệt AQI giờ (AQI^h^, công thức 1/2, mục 2.2.1) và AQI ngày (AQI^d^, công thức 1, mục 2.2.2). Xem field 'hour_input'/'day_input' của từng chất bên dưới. Pha 1 chịu trách nhiệm tính Nowcast/trung bình trước khi gọi aqi_core.",
+
+  "aqi_breakpoints": [
+    {"i_low": 0,   "i_high": 50},
+    {"i_low": 50,  "i_high": 100},
+    {"i_low": 100, "i_high": 150},
+    {"i_low": 150, "i_high": 200},
+    {"i_low": 200, "i_high": 300},
+    {"i_low": 300, "i_high": 400},
+    {"i_low": 400, "i_high": 500}
+  ],
+  "_aqi_breakpoints_note": "7 khoảng, khớp 8 mốc I trong Bảng 2 (0,50,100,150,200,300,400,500). DÙNG ĐỂ NỘI SUY IAQI — không dùng để tra level/label hiển thị (xem 'level_labels').",
+
+  "level_labels": [
+    {"i_low": 0,   "i_high": 50,  "level": 1, "label": "Tốt"},
+    {"i_low": 51,  "i_high": 100, "level": 2, "label": "Trung bình"},
+    {"i_low": 101, "i_high": 150, "level": 3, "label": "Kém"},
+    {"i_low": 151, "i_high": 200, "level": 4, "label": "Xấu"},
+    {"i_low": 201, "i_high": 300, "level": 5, "label": "Rất xấu"},
+    {"i_low": 301, "i_high": 500, "level": 6, "label": "Nguy hại"}
+  ],
+  "_level_labels_note": "Bảng 1 gốc, 6 mức. CHỈ dùng để tra màu/nhãn từ giá trị AQI CUỐI CÙNG (level_of()) — không dùng để nội suy IAQI từng chất.",
+
+  "pollutants": {
+    "pm2_5": {
+      "hour_input": "nowcast_12h",
+      "day_input": "avg_24h",
+      "bp": [0, 25, 50, 80, 150, 250, 350, 500]
+    },
+    "pm10": {
+      "hour_input": "nowcast_12h",
+      "day_input": "avg_24h",
+      "bp": [0, 50, 150, 250, 350, 420, 500, 600]
+    },
+    "so2": {
+      "hour_input": "avg_1h_current",
+      "day_input": "max_avg_1h_of_day",
+      "bp": [0, 125, 350, 550, 800, 1600, 2100, 2630]
+    },
+    "no2": {
+      "hour_input": "avg_1h_current",
+      "day_input": "max_avg_1h_of_day",
+      "bp": [0, 100, 200, 700, 1200, 2350, 3100, 3850]
+    },
+    "co": {
+      "hour_input": "avg_1h_current",
+      "day_input": "max_avg_1h_of_day",
+      "bp": [0, 10000, 30000, 45000, 60000, 90000, 120000, 150000]
+    },
+    "o3_1h": {
+      "hour_input": "avg_1h_current",
+      "day_input": "max_avg_1h_of_day",
+      "bp": [0, 160, 200, 300, 400, 800, 1000, 1200]
+    },
+    "o3_8h": {
+      "hour_input": null,
+      "day_input": "max_avg_8h_of_day",
+      "bp": [0, 100, 120, 170, 210, 400],
+      "_note_8h_cap": "Bảng 2 gốc không có mốc I=400,500 cho cột O3(8h) (chỉ tới I=300). Theo mục 2.2.2b: KHÔNG tính AQI thông số O3 khi giá trị TB8h lớn nhất trong ngày > 400 µg/m3 — khi đó AQI ngày của O3 chỉ tính từ O3(1h)."
+    }
+  },
+  "_bp_format": "bp[i] -> bp[i+1] ánh xạ sang aqi_breakpoints[i].i_low -> i_high, theo Công thức 1/2 (mục 2.2.1b, 2.2.2b).",
+
+  "_pending_todo_iaqi_py": "iaqi.py hiện đọc key 'aqi_breakpoints' với level/label và pollutant key 'o3' — cần cập nhật để dùng 'aqi_breakpoints' (chỉ i_low/i_high) cho nội suy, 'level_labels' cho level_of(), và tách 'o3_1h'/'o3_8h' theo AQI giờ/ngày. Xem TODO tiếp theo đã thống nhất trong hội thoại."
+}

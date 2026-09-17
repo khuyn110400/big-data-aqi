@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/raw/
+data/out/
+*.log
+.checkpoint/
+spark-warehouse/
+kaggle_exports/
+.pytest_cache/
+.idea/
+.vscode/
+.DS_Store
+.ipynb_checkpoints/
