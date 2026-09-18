@@ -1,0 +1,580 @@
+{
+  "id": null,
+  "uid": "aqi-big-data-overview",
+  "title": "AQI Big Data Overview",
+  "tags": [
+    "AQI",
+    "Big Data",
+    "OpenWeather",
+    "HBase",
+    "FastAPI"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "country",
+        "label": "Country",
+        "type": "custom",
+        "query": "VN,IN,CN,JP,US,CA,GB,DE,AU,BR,ZA,AE",
+        "current": {
+          "selected": true,
+          "text": "VN",
+          "value": "VN"
+        },
+        "includeAll": true,
+        "allValue": "",
+        "multi": false,
+        "options": [],
+        "hide": 0
+      },
+      {
+        "name": "station_id",
+        "label": "Station ID",
+        "type": "textbox",
+        "query": "VN_HCM_01",
+        "current": {
+          "selected": true,
+          "text": "VN_HCM_01",
+          "value": "VN_HCM_01"
+        },
+        "hide": 0
+      },
+      {
+        "name": "ranking_dt",
+        "label": "Ranking Date (UTC)",
+        "type": "textbox",
+        "query": "2026-09-18",
+        "current": {
+          "selected": true,
+          "text": "2026-09-18",
+          "value": "2026-09-18"
+        },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Station Directory",
+      "type": "table",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://serving-api:8000/stations?country=${country}",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "station_id",
+              "text": "Station ID",
+              "type": "string"
+            },
+            {
+              "selector": "city",
+              "text": "City",
+              "type": "string"
+            },
+            {
+              "selector": "country",
+              "text": "Country",
+              "type": "string"
+            },
+            {
+              "selector": "lat",
+              "text": "Latitude",
+              "type": "number"
+            },
+            {
+              "selector": "lon",
+              "text": "Longitude",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Station Coverage Map",
+      "type": "geomap",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://serving-api:8000/stations?country=${country}",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "station_id",
+              "text": "Station ID",
+              "type": "string"
+            },
+            {
+              "selector": "city",
+              "text": "City",
+              "type": "string"
+            },
+            {
+              "selector": "country",
+              "text": "Country",
+              "type": "string"
+            },
+            {
+              "selector": "lat",
+              "text": "Latitude",
+              "type": "number"
+            },
+            {
+              "selector": "lon",
+              "text": "Longitude",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "view": {
+          "id": "fit",
+          "lat": 16.0,
+          "lon": 106.0,
+          "zoom": 4
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showScale": true,
+          "showMeasure": false,
+          "showDebug": false
+        },
+        "tooltip": {
+          "mode": "details"
+        },
+        "basemap": {
+          "type": "xyz",
+          "name": "OpenStreetMap",
+          "config": {
+            "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          }
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Stations",
+            "location": {
+              "mode": "coords",
+              "latitude": "Latitude",
+              "longitude": "Longitude"
+            },
+            "config": {
+              "showLegend": false,
+              "style": {
+                "size": {
+                  "fixed": 7
+                },
+                "opacity": 0.75
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Latest AQI",
+      "description": "Populated when processed AQI rows are available in HBase.",
+      "type": "table",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://serving-api:8000/aqi/latest?country=${country}&limit=200",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "station_id",
+              "text": "Station ID",
+              "type": "string"
+            },
+            {
+              "selector": "city",
+              "text": "City",
+              "type": "string"
+            },
+            {
+              "selector": "lat",
+              "text": "Latitude",
+              "type": "number"
+            },
+            {
+              "selector": "lon",
+              "text": "Longitude",
+              "type": "number"
+            },
+            {
+              "selector": "ts_utc",
+              "text": "Time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "aqi",
+              "text": "AQI",
+              "type": "number"
+            },
+            {
+              "selector": "aqi_level",
+              "text": "Level",
+              "type": "number"
+            },
+            {
+              "selector": "aqi_label",
+              "text": "Label",
+              "type": "string"
+            },
+            {
+              "selector": "dominant_pollutant",
+              "text": "Dominant Pollutant",
+              "type": "string"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 4,
+      "title": "AQI Ranking",
+      "description": "Daily ranking from processed HBase data.",
+      "type": "table",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://serving-api:8000/aqi/ranking?dt=${ranking_dt}&country=${country}",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "rank",
+              "text": "Rank",
+              "type": "number"
+            },
+            {
+              "selector": "city",
+              "text": "City",
+              "type": "string"
+            },
+            {
+              "selector": "avg_aqi",
+              "text": "Average AQI",
+              "type": "number"
+            },
+            {
+              "selector": "max_aqi",
+              "text": "Max AQI",
+              "type": "number"
+            },
+            {
+              "selector": "worst_pollutant",
+              "text": "Worst Pollutant",
+              "type": "string"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 5,
+      "title": "AQI Time Series — ${station_id}",
+      "type": "timeseries",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "timeseries",
+          "parser": "backend",
+          "url": "http://serving-api:8000/aqi/timeseries?station_id=${station_id}&from=${__from:date:iso}&to=${__to:date:iso}",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "ts_utc",
+              "text": "Time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "aqi",
+              "text": "AQI",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Pollutants — ${station_id}",
+      "type": "timeseries",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "timeseries",
+          "parser": "backend",
+          "url": "http://serving-api:8000/aqi/timeseries?station_id=${station_id}&from=${__from:date:iso}&to=${__to:date:iso}",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "ts_utc",
+              "text": "Time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "pm2_5",
+              "text": "PM2.5",
+              "type": "number"
+            },
+            {
+              "selector": "pm10",
+              "text": "PM10",
+              "type": "number"
+            },
+            {
+              "selector": "o3",
+              "text": "O3",
+              "type": "number"
+            },
+            {
+              "selector": "no2",
+              "text": "NO2",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ]
+}

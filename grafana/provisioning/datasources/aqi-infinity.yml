@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: AQI FastAPI
+    uid: aqi-fastapi
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://serving-api:8000
+    isDefault: true
+    editable: true

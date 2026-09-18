@@ -186,10 +186,58 @@ services:
     depends_on:
       - hbase-master
 
+
+  # HBase Thrift bridge cho FastAPI/HappyBase.
+  # Tách riêng khỏi hbase-master để không thay đổi tiến trình HMaster.
+  hbase-thrift:
+    image: bde2020/hbase-master:1.0.0-hbase1.2.6
+    container_name: hbase-thrift
+    restart: unless-stopped
+    command: ["/opt/hbase-1.2.6/bin/hbase-daemon.sh", "foreground_start", "thrift", "-p", "9090", "-b", "0.0.0.0"]
+    ports:
+      - "9090:9090"
+    environment:
+      <<: *hadoop-env
+      HBASE_CONF_hbase_rootdir: hdfs://namenode:9000/hbase
+      HBASE_CONF_hbase_cluster_distributed: "true"
+      HBASE_CONF_hbase_zookeeper_quorum: zookeeper
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 zookeeper:2181 hbase-master:16010"
+    depends_on:
+      hbase-master:
+        condition: service_started
+      hbase-regionserver:
+        condition: service_started
+
+  # --- FastAPI serving ------------------------------------------------------
+  serving-api:
+    build:
+      context: ..
+      dockerfile: serving/Dockerfile
+    container_name: serving-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      HBASE_THRIFT_HOST: hbase-thrift
+      HBASE_THRIFT_PORT: "9090"
+      HBASE_TABLE: air_quality
+    depends_on:
+      hbase-thrift:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   # --- Grafana --------------------------------------------------------------
   # localhost:3000, cần plugin yesoreyeram-infinity-datasource để đọc JSON API
   # Login mặc định admin/admin (đổi ở lần đăng nhập đầu). Datasource trỏ vào
-  # http://host.docker.internal:8000 (FastAPI của serving/app/main.py chạy trên host).
+  # http://serving-api:8000 (FastAPI chạy trong cùng Docker network).
   grafana:
     image: grafana/grafana-oss:11.1.0
     container_name: grafana
@@ -197,9 +245,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource
+      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource 3.7.1"
     volumes:
       - grafana-data:/var/lib/grafana
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
 
 volumes:
   kafka-data:

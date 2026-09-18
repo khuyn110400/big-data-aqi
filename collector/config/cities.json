@@ -1,14 +1,1406 @@
 {
-  "_note": "NGƯỜI A sinh file này ở M2 bằng cách lọc từ http://bulk.openweathermap.org/sample/city.list.json.gz",
-  "_target": "~200 điểm: 100 VN + 50 IN + 50 global (để có đa dạng khí hậu/mức ô nhiễm cho phần phân cụm)",
+  "_note": "200 điểm AQI: 100 VN + 50 IN + 50 global. Global gồm 10 quốc gia x 5 thành phố lớn.",
+  "_target": "100 VN + 50 IN + 50 global",
   "stations": [
-    {"station_id": "VN_HCM_01", "city": "Ho Chi Minh City", "country": "VN", "lat": 10.8231, "lon": 106.6297},
-    {"station_id": "VN_HAN_01", "city": "Hanoi",            "country": "VN", "lat": 21.0278, "lon": 105.8342},
-    {"station_id": "VN_DAD_01", "city": "Da Nang",          "country": "VN", "lat": 16.0544, "lon": 108.2022},
-    {"station_id": "VN_BDU_01", "city": "Thu Dau Mot",      "country": "VN", "lat": 10.9804, "lon": 106.6519},
-    {"station_id": "IN_DEL_01", "city": "New Delhi",        "country": "IN", "lat": 28.6139, "lon": 77.2090},
-    {"station_id": "IN_BOM_01", "city": "Mumbai",           "country": "IN", "lat": 19.0760, "lon": 72.8777},
-    {"station_id": "CN_BJS_01", "city": "Beijing",          "country": "CN", "lat": 39.9042, "lon": 116.4074},
-    {"station_id": "JP_TYO_01", "city": "Tokyo",            "country": "JP", "lat": 35.6762, "lon": 139.6503}
+    {
+      "station_id": "VN_HCM_01",
+      "city": "Ho Chi Minh City",
+      "country": "VN",
+      "lat": 10.8231,
+      "lon": 106.6297
+    },
+    {
+      "station_id": "VN_HAN_01",
+      "city": "Hanoi",
+      "country": "VN",
+      "lat": 21.0278,
+      "lon": 105.8342
+    },
+    {
+      "station_id": "VN_DAD_01",
+      "city": "Da Nang",
+      "country": "VN",
+      "lat": 16.0544,
+      "lon": 108.2022
+    },
+    {
+      "station_id": "VN_BDU_01",
+      "city": "Thu Dau Mot",
+      "country": "VN",
+      "lat": 10.9804,
+      "lon": 106.6519
+    },
+    {
+      "station_id": "IN_DEL_01",
+      "city": "New Delhi",
+      "country": "IN",
+      "lat": 28.6139,
+      "lon": 77.209
+    },
+    {
+      "station_id": "IN_BOM_01",
+      "city": "Mumbai",
+      "country": "IN",
+      "lat": 19.076,
+      "lon": 72.8777
+    },
+    {
+      "station_id": "IN_AHI_01",
+      "city": "Ahiri",
+      "country": "IN",
+      "lat": 19.4,
+      "lon": 80.0167
+    },
+    {
+      "station_id": "IN_AKL_01",
+      "city": "Aklera",
+      "country": "IN",
+      "lat": 24.4167,
+      "lon": 76.5667
+    },
+    {
+      "station_id": "IN_AMA_01",
+      "city": "Amalner",
+      "country": "IN",
+      "lat": 21.05,
+      "lon": 75.0667
+    },
+    {
+      "station_id": "IN_AMR_01",
+      "city": "Amritsar",
+      "country": "IN",
+      "lat": 31.6331,
+      "lon": 74.8656
+    },
+    {
+      "station_id": "IN_ANU_01",
+      "city": "Anūpgarh",
+      "country": "IN",
+      "lat": 29.1911,
+      "lon": 73.2086
+    },
+    {
+      "station_id": "IN_BAI_01",
+      "city": "Bairāgnia",
+      "country": "IN",
+      "lat": 26.75,
+      "lon": 85.2833
+    },
+    {
+      "station_id": "IN_BAR_01",
+      "city": "Barhi",
+      "country": "IN",
+      "lat": 23.9,
+      "lon": 80.8
+    },
+    {
+      "station_id": "IN_BHA_01",
+      "city": "Bhānder",
+      "country": "IN",
+      "lat": 25.7333,
+      "lon": 78.75
+    },
+    {
+      "station_id": "IN_BHA_02",
+      "city": "Bhātāpāra",
+      "country": "IN",
+      "lat": 21.7333,
+      "lon": 81.9333
+    },
+    {
+      "station_id": "IN_BUG_01",
+      "city": "Buguda",
+      "country": "IN",
+      "lat": 19.8167,
+      "lon": 84.8
+    },
+    {
+      "station_id": "IN_CHA_01",
+      "city": "Chāndbāli",
+      "country": "IN",
+      "lat": 20.7833,
+      "lon": 86.7667
+    },
+    {
+      "station_id": "IN_DHA_01",
+      "city": "Dhārchula",
+      "country": "IN",
+      "lat": 29.85,
+      "lon": 80.5333
+    },
+    {
+      "station_id": "IN_DWA_01",
+      "city": "Dwārka",
+      "country": "IN",
+      "lat": 22.2394,
+      "lon": 68.9678
+    },
+    {
+      "station_id": "IN_GAL_01",
+      "city": "Galiākot",
+      "country": "IN",
+      "lat": 23.5167,
+      "lon": 74.0
+    },
+    {
+      "station_id": "IN_GAN_01",
+      "city": "Gangākher",
+      "country": "IN",
+      "lat": 18.95,
+      "lon": 76.75
+    },
+    {
+      "station_id": "IN_GID_01",
+      "city": "Giddalūr",
+      "country": "IN",
+      "lat": 15.35,
+      "lon": 78.9167
+    },
+    {
+      "station_id": "IN_GOP_01",
+      "city": "Gopāmau",
+      "country": "IN",
+      "lat": 27.55,
+      "lon": 80.2833
+    },
+    {
+      "station_id": "IN_HIR_01",
+      "city": "Hiriyūr",
+      "country": "IN",
+      "lat": 13.9456,
+      "lon": 76.6192
+    },
+    {
+      "station_id": "IN_KAL_01",
+      "city": "Kalpatta",
+      "country": "IN",
+      "lat": 11.6106,
+      "lon": 76.0822
+    },
+    {
+      "station_id": "IN_KAN_01",
+      "city": "Kanniyākumāri",
+      "country": "IN",
+      "lat": 8.0833,
+      "lon": 77.5667
+    },
+    {
+      "station_id": "IN_KAR_01",
+      "city": "Karwar",
+      "country": "IN",
+      "lat": 14.8,
+      "lon": 74.1333
+    },
+    {
+      "station_id": "IN_KAV_01",
+      "city": "Kavaratti",
+      "country": "IN",
+      "lat": 10.5669,
+      "lon": 72.642
+    },
+    {
+      "station_id": "IN_KOT_01",
+      "city": "Kotri",
+      "country": "IN",
+      "lat": 26.6833,
+      "lon": 70.85
+    },
+    {
+      "station_id": "IN_KAD_01",
+      "city": "Kādīpur",
+      "country": "IN",
+      "lat": 26.1667,
+      "lon": 82.3833
+    },
+    {
+      "station_id": "IN_KAL_02",
+      "city": "Kāla",
+      "country": "IN",
+      "lat": 17.2,
+      "lon": 74.1667
+    },
+    {
+      "station_id": "IN_KIL_01",
+      "city": "Kīl Bhuvanagiri",
+      "country": "IN",
+      "lat": 11.4667,
+      "lon": 79.6333
+    },
+    {
+      "station_id": "IN_MOR_01",
+      "city": "Morigaon",
+      "country": "IN",
+      "lat": 26.3796,
+      "lon": 92.3415
+    },
+    {
+      "station_id": "IN_NAB_01",
+      "city": "Nabagrām",
+      "country": "IN",
+      "lat": 22.2881,
+      "lon": 88.5092
+    },
+    {
+      "station_id": "IN_NAL_01",
+      "city": "Nalhāti",
+      "country": "IN",
+      "lat": 24.3,
+      "lon": 87.8167
+    },
+    {
+      "station_id": "IN_NIL_01",
+      "city": "Nilakottai",
+      "country": "IN",
+      "lat": 10.1667,
+      "lon": 77.8667
+    },
+    {
+      "station_id": "IN_PAC_01",
+      "city": "Pachmarhi",
+      "country": "IN",
+      "lat": 22.4667,
+      "lon": 78.4333
+    },
+    {
+      "station_id": "IN_PIT_01",
+      "city": "Pithāpuram",
+      "country": "IN",
+      "lat": 17.1167,
+      "lon": 82.2667
+    },
+    {
+      "station_id": "IN_POR_01",
+      "city": "Port Blair",
+      "country": "IN",
+      "lat": 11.6667,
+      "lon": 92.75
+    },
+    {
+      "station_id": "IN_PUS_01",
+      "city": "Pushkar",
+      "country": "IN",
+      "lat": 26.5,
+      "lon": 74.55
+    },
+    {
+      "station_id": "IN_PAL_01",
+      "city": "Pālitāna",
+      "country": "IN",
+      "lat": 21.5167,
+      "lon": 71.8333
+    },
+    {
+      "station_id": "IN_RAY_01",
+      "city": "Rāy",
+      "country": "IN",
+      "lat": 23.6833,
+      "lon": 85.05
+    },
+    {
+      "station_id": "IN_SAI_01",
+      "city": "Saiha",
+      "country": "IN",
+      "lat": 22.4833,
+      "lon": 92.9667
+    },
+    {
+      "station_id": "IN_SAR_01",
+      "city": "Sarāhan",
+      "country": "IN",
+      "lat": 31.5167,
+      "lon": 77.8
+    },
+    {
+      "station_id": "IN_SEC_01",
+      "city": "Secunderabad",
+      "country": "IN",
+      "lat": 17.5043,
+      "lon": 78.5426
+    },
+    {
+      "station_id": "IN_TEZ_01",
+      "city": "Tezu",
+      "country": "IN",
+      "lat": 27.9167,
+      "lon": 96.1667
+    },
+    {
+      "station_id": "IN_THA_01",
+      "city": "Thang",
+      "country": "IN",
+      "lat": 34.9167,
+      "lon": 76.75
+    },
+    {
+      "station_id": "IN_THA_02",
+      "city": "Tharād",
+      "country": "IN",
+      "lat": 24.3961,
+      "lon": 71.6267
+    },
+    {
+      "station_id": "IN_THA_03",
+      "city": "Thākurganj",
+      "country": "IN",
+      "lat": 26.45,
+      "lon": 88.1333
+    },
+    {
+      "station_id": "IN_TUR_01",
+      "city": "Tura",
+      "country": "IN",
+      "lat": 25.5198,
+      "lon": 90.2201
+    },
+    {
+      "station_id": "IN_TAL_01",
+      "city": "Tālīkota",
+      "country": "IN",
+      "lat": 16.4833,
+      "lon": 76.3167
+    },
+    {
+      "station_id": "IN_UMA_01",
+      "city": "Umarkot",
+      "country": "IN",
+      "lat": 19.6667,
+      "lon": 82.2167
+    },
+    {
+      "station_id": "IN_URI_01",
+      "city": "Uri",
+      "country": "IN",
+      "lat": 34.0833,
+      "lon": 74.0333
+    },
+    {
+      "station_id": "IN_WAN_01",
+      "city": "Wāngjing",
+      "country": "IN",
+      "lat": 24.6,
+      "lon": 94.0333
+    },
+    {
+      "station_id": "VN_BAC_01",
+      "city": "Bac Kan",
+      "country": "VN",
+      "lat": 22.1333,
+      "lon": 105.8333
+    },
+    {
+      "station_id": "VN_BAC_02",
+      "city": "Bac Ninh",
+      "country": "VN",
+      "lat": 21.1833,
+      "lon": 106.05
+    },
+    {
+      "station_id": "VN_BUO_01",
+      "city": "Buon Ma Thuot",
+      "country": "VN",
+      "lat": 12.6667,
+      "lon": 108.05
+    },
+    {
+      "station_id": "VN_CAM_01",
+      "city": "Cam Pha Mines",
+      "country": "VN",
+      "lat": 21.0167,
+      "lon": 107.3
+    },
+    {
+      "station_id": "VN_CAM_02",
+      "city": "Cam Ranh",
+      "country": "VN",
+      "lat": 11.9214,
+      "lon": 109.1591
+    },
+    {
+      "station_id": "VN_CAN_01",
+      "city": "Can Duoc",
+      "country": "VN",
+      "lat": 10.6167,
+      "lon": 106.6667
+    },
+    {
+      "station_id": "VN_CAN_02",
+      "city": "Can Tho",
+      "country": "VN",
+      "lat": 10.0333,
+      "lon": 105.7833
+    },
+    {
+      "station_id": "VN_CAO_01",
+      "city": "Cao Bang",
+      "country": "VN",
+      "lat": 22.6667,
+      "lon": 106.25
+    },
+    {
+      "station_id": "VN_CHA_01",
+      "city": "Chau Doc",
+      "country": "VN",
+      "lat": 10.7,
+      "lon": 105.1167
+    },
+    {
+      "station_id": "VN_CON_01",
+      "city": "Con Son",
+      "country": "VN",
+      "lat": 8.6833,
+      "lon": 106.6167
+    },
+    {
+      "station_id": "VN_DAL_01",
+      "city": "Da Lat",
+      "country": "VN",
+      "lat": 11.9465,
+      "lon": 108.4419
+    },
+    {
+      "station_id": "VN_DON_01",
+      "city": "Dong Hoi",
+      "country": "VN",
+      "lat": 17.4833,
+      "lon": 106.6
+    },
+    {
+      "station_id": "VN_DON_02",
+      "city": "Dong Xoai",
+      "country": "VN",
+      "lat": 11.5333,
+      "lon": 106.9167
+    },
+    {
+      "station_id": "VN_DUO_01",
+      "city": "Duong GJong",
+      "country": "VN",
+      "lat": 10.2167,
+      "lon": 103.9667
+    },
+    {
+      "station_id": "VN_HAG_01",
+      "city": "Ha Giang",
+      "country": "VN",
+      "lat": 22.8333,
+      "lon": 104.9833
+    },
+    {
+      "station_id": "VN_HAL_01",
+      "city": "Ha Long",
+      "country": "VN",
+      "lat": 20.9511,
+      "lon": 107.08
+    },
+    {
+      "station_id": "VN_HAT_01",
+      "city": "Ha Tien",
+      "country": "VN",
+      "lat": 10.3833,
+      "lon": 104.4833
+    },
+    {
+      "station_id": "VN_HAI_01",
+      "city": "Hai Duong",
+      "country": "VN",
+      "lat": 20.9333,
+      "lon": 106.3167
+    },
+    {
+      "station_id": "VN_HAI_02",
+      "city": "Hai Ha",
+      "country": "VN",
+      "lat": 20.6167,
+      "lon": 105.2333
+    },
+    {
+      "station_id": "VN_HOA_01",
+      "city": "Hoa Binh",
+      "country": "VN",
+      "lat": 20.8133,
+      "lon": 105.3383
+    },
+    {
+      "station_id": "VN_HOI_01",
+      "city": "Hoi An",
+      "country": "VN",
+      "lat": 15.8794,
+      "lon": 108.335
+    },
+    {
+      "station_id": "VN_HUY_01",
+      "city": "Huyen Son Duong",
+      "country": "VN",
+      "lat": 21.7036,
+      "lon": 105.4041
+    },
+    {
+      "station_id": "VN_HUY_02",
+      "city": "Huyen Thanh Hoa",
+      "country": "VN",
+      "lat": 21.4958,
+      "lon": 105.1453
+    },
+    {
+      "station_id": "VN_HUY_03",
+      "city": "Huyen Thanh Son",
+      "country": "VN",
+      "lat": 21.2199,
+      "lon": 105.1861
+    },
+    {
+      "station_id": "VN_HUY_04",
+      "city": "Huyện Ðiện Biên",
+      "country": "VN",
+      "lat": 21.3333,
+      "lon": 102.9333
+    },
+    {
+      "station_id": "VN_KON_01",
+      "city": "Kon Tum",
+      "country": "VN",
+      "lat": 14.35,
+      "lon": 108.0
+    },
+    {
+      "station_id": "VN_LAG_01",
+      "city": "Lagi",
+      "country": "VN",
+      "lat": 10.6667,
+      "lon": 107.7833
+    },
+    {
+      "station_id": "VN_LAN_01",
+      "city": "Lang Son",
+      "country": "VN",
+      "lat": 21.8333,
+      "lon": 106.7333
+    },
+    {
+      "station_id": "VN_LON_01",
+      "city": "Long Xuyen",
+      "country": "VN",
+      "lat": 10.3833,
+      "lon": 105.4167
+    },
+    {
+      "station_id": "VN_LOC_01",
+      "city": "Lộc Ninh",
+      "country": "VN",
+      "lat": 11.85,
+      "lon": 106.6
+    },
+    {
+      "station_id": "VN_NGO_01",
+      "city": "Ngô Châu",
+      "country": "VN",
+      "lat": 13.45,
+      "lon": 109.1
+    },
+    {
+      "station_id": "VN_PHA_01",
+      "city": "Phan Rang-Thap Cham",
+      "country": "VN",
+      "lat": 11.5667,
+      "lon": 108.9833
+    },
+    {
+      "station_id": "VN_PHO_01",
+      "city": "Phong Tho",
+      "country": "VN",
+      "lat": 22.5333,
+      "lon": 103.35
+    },
+    {
+      "station_id": "VN_PHU_01",
+      "city": "Phu Hưu",
+      "country": "VN",
+      "lat": 21.0167,
+      "lon": 105.5333
+    },
+    {
+      "station_id": "VN_PLE_01",
+      "city": "Pleiku",
+      "country": "VN",
+      "lat": 13.9833,
+      "lon": 108.0
+    },
+    {
+      "station_id": "VN_QUA_01",
+      "city": "Quang Ngai",
+      "country": "VN",
+      "lat": 15.1167,
+      "lon": 108.8
+    },
+    {
+      "station_id": "VN_QUY_01",
+      "city": "Quy Nhon",
+      "country": "VN",
+      "lat": 13.7667,
+      "lon": 109.2333
+    },
+    {
+      "station_id": "VN_RAC_01",
+      "city": "Rach Gia",
+      "country": "VN",
+      "lat": 10.0167,
+      "lon": 105.0833
+    },
+    {
+      "station_id": "VN_SAD_01",
+      "city": "Sa Dec",
+      "country": "VN",
+      "lat": 10.3,
+      "lon": 105.7667
+    },
+    {
+      "station_id": "VN_SOC_01",
+      "city": "Soc Trang",
+      "country": "VN",
+      "lat": 9.6033,
+      "lon": 105.98
+    },
+    {
+      "station_id": "VN_SOC_02",
+      "city": "Socialist Republic of Vietnam",
+      "country": "VN",
+      "lat": 16.1667,
+      "lon": 107.8333
+    },
+    {
+      "station_id": "VN_TAM_01",
+      "city": "Tam Ky",
+      "country": "VN",
+      "lat": 15.5667,
+      "lon": 108.4833
+    },
+    {
+      "station_id": "VN_TAN_01",
+      "city": "Tan An",
+      "country": "VN",
+      "lat": 10.5333,
+      "lon": 106.4167
+    },
+    {
+      "station_id": "VN_TAY_01",
+      "city": "Tay Ninh",
+      "country": "VN",
+      "lat": 11.3,
+      "lon": 106.1
+    },
+    {
+      "station_id": "VN_THA_01",
+      "city": "Thai Binh",
+      "country": "VN",
+      "lat": 20.45,
+      "lon": 106.3333
+    },
+    {
+      "station_id": "VN_THA_02",
+      "city": "Thai Nguyen",
+      "country": "VN",
+      "lat": 21.5928,
+      "lon": 105.8442
+    },
+    {
+      "station_id": "VN_THA_03",
+      "city": "Thanh Hoa",
+      "country": "VN",
+      "lat": 19.8,
+      "lon": 105.7667
+    },
+    {
+      "station_id": "VN_THA_04",
+      "city": "Thành Phố Hải Phòng",
+      "country": "VN",
+      "lat": 20.8333,
+      "lon": 106.5833
+    },
+    {
+      "station_id": "VN_TUY_01",
+      "city": "Tuy Hoa",
+      "country": "VN",
+      "lat": 13.0833,
+      "lon": 109.3
+    },
+    {
+      "station_id": "VN_TUY_02",
+      "city": "Tuyen Quang",
+      "country": "VN",
+      "lat": 21.8233,
+      "lon": 105.2181
+    },
+    {
+      "station_id": "VN_TIN_01",
+      "city": "Tỉnh Bà Rịa-Vũng Tàu",
+      "country": "VN",
+      "lat": 10.5833,
+      "lon": 107.25
+    },
+    {
+      "station_id": "VN_TIN_02",
+      "city": "Tỉnh Bình Phước",
+      "country": "VN",
+      "lat": 11.75,
+      "lon": 106.9167
+    },
+    {
+      "station_id": "VN_TIN_03",
+      "city": "Tỉnh Bình Thuận",
+      "country": "VN",
+      "lat": 11.0833,
+      "lon": 108.0
+    },
+    {
+      "station_id": "VN_TIN_04",
+      "city": "Tỉnh Bình Ðịnh",
+      "country": "VN",
+      "lat": 14.1667,
+      "lon": 109.0
+    },
+    {
+      "station_id": "VN_TIN_05",
+      "city": "Tỉnh Bạc Liêu",
+      "country": "VN",
+      "lat": 9.25,
+      "lon": 105.75
+    },
+    {
+      "station_id": "VN_TIN_06",
+      "city": "Tỉnh Bắc Giang",
+      "country": "VN",
+      "lat": 21.3333,
+      "lon": 106.3333
+    },
+    {
+      "station_id": "VN_TIN_07",
+      "city": "Tỉnh Bến Tre",
+      "country": "VN",
+      "lat": 10.1667,
+      "lon": 106.5
+    },
+    {
+      "station_id": "VN_TIN_08",
+      "city": "Tỉnh Cao Bằng",
+      "country": "VN",
+      "lat": 22.6667,
+      "lon": 106.0
+    },
+    {
+      "station_id": "VN_TIN_09",
+      "city": "Tỉnh Cà Mau",
+      "country": "VN",
+      "lat": 9.0833,
+      "lon": 105.0833
+    },
+    {
+      "station_id": "VN_TIN_10",
+      "city": "Tỉnh Cần Thơ",
+      "country": "VN",
+      "lat": 9.8333,
+      "lon": 105.6667
+    },
+    {
+      "station_id": "VN_TIN_11",
+      "city": "Tỉnh Gia Lai",
+      "country": "VN",
+      "lat": 13.75,
+      "lon": 108.25
+    },
+    {
+      "station_id": "VN_TIN_12",
+      "city": "Tỉnh Hà Nam",
+      "country": "VN",
+      "lat": 20.5833,
+      "lon": 106.0
+    },
+    {
+      "station_id": "VN_TIN_13",
+      "city": "Tỉnh Hà Tây",
+      "country": "VN",
+      "lat": 20.8333,
+      "lon": 105.6667
+    },
+    {
+      "station_id": "VN_TIN_14",
+      "city": "Tỉnh Hà Tĩnh",
+      "country": "VN",
+      "lat": 18.3333,
+      "lon": 105.75
+    },
+    {
+      "station_id": "VN_TIN_15",
+      "city": "Tỉnh Hòa Bình",
+      "country": "VN",
+      "lat": 20.3333,
+      "lon": 105.25
+    },
+    {
+      "station_id": "VN_TIN_16",
+      "city": "Tỉnh Hưng Yên",
+      "country": "VN",
+      "lat": 20.8333,
+      "lon": 106.0833
+    },
+    {
+      "station_id": "VN_TIN_17",
+      "city": "Tỉnh Khánh Hòa",
+      "country": "VN",
+      "lat": 12.3333,
+      "lon": 109.0
+    },
+    {
+      "station_id": "VN_TIN_18",
+      "city": "Tỉnh Kon Tum",
+      "country": "VN",
+      "lat": 14.75,
+      "lon": 107.9167
+    },
+    {
+      "station_id": "VN_TIN_19",
+      "city": "Tỉnh Long An",
+      "country": "VN",
+      "lat": 10.6667,
+      "lon": 106.1667
+    },
+    {
+      "station_id": "VN_TIN_20",
+      "city": "Tỉnh Lào Cai",
+      "country": "VN",
+      "lat": 22.3333,
+      "lon": 104.0
+    },
+    {
+      "station_id": "VN_TIN_21",
+      "city": "Tỉnh Lâm Ðồng",
+      "country": "VN",
+      "lat": 11.5,
+      "lon": 108.3333
+    },
+    {
+      "station_id": "VN_TIN_22",
+      "city": "Tỉnh Lạng Sơn",
+      "country": "VN",
+      "lat": 21.75,
+      "lon": 106.5
+    },
+    {
+      "station_id": "VN_TIN_23",
+      "city": "Tỉnh Nam Ðịnh",
+      "country": "VN",
+      "lat": 20.25,
+      "lon": 106.25
+    },
+    {
+      "station_id": "VN_TIN_24",
+      "city": "Tỉnh Nghệ An",
+      "country": "VN",
+      "lat": 19.3333,
+      "lon": 104.8333
+    },
+    {
+      "station_id": "VN_TIN_25",
+      "city": "Tỉnh Ninh Bình",
+      "country": "VN",
+      "lat": 20.25,
+      "lon": 105.8333
+    },
+    {
+      "station_id": "VN_TIN_26",
+      "city": "Tỉnh Ninh Thuận",
+      "country": "VN",
+      "lat": 11.75,
+      "lon": 108.8333
+    },
+    {
+      "station_id": "VN_TIN_27",
+      "city": "Tỉnh Quảng Bình",
+      "country": "VN",
+      "lat": 17.5,
+      "lon": 106.3333
+    },
+    {
+      "station_id": "VN_TIN_28",
+      "city": "Tỉnh Quảng Nam",
+      "country": "VN",
+      "lat": 15.5833,
+      "lon": 107.9167
+    },
+    {
+      "station_id": "VN_TIN_29",
+      "city": "Tỉnh Quảng Ninh",
+      "country": "VN",
+      "lat": 21.25,
+      "lon": 107.3333
+    },
+    {
+      "station_id": "VN_TIN_30",
+      "city": "Tỉnh Quảng Trị",
+      "country": "VN",
+      "lat": 16.75,
+      "lon": 107.0
+    },
+    {
+      "station_id": "VN_TIN_31",
+      "city": "Tỉnh Sơn La",
+      "country": "VN",
+      "lat": 21.1667,
+      "lon": 104.0
+    },
+    {
+      "station_id": "VN_TIN_32",
+      "city": "Tỉnh Thanh Hóa",
+      "country": "VN",
+      "lat": 20.0,
+      "lon": 105.5
+    },
+    {
+      "station_id": "VN_TIN_33",
+      "city": "Tỉnh Thừa Thiên-Huế",
+      "country": "VN",
+      "lat": 16.3333,
+      "lon": 107.5833
+    },
+    {
+      "station_id": "VN_TIN_34",
+      "city": "Tỉnh Tiền Giang",
+      "country": "VN",
+      "lat": 10.4167,
+      "lon": 106.1667
+    },
+    {
+      "station_id": "VN_TIN_35",
+      "city": "Tỉnh Trà Vinh",
+      "country": "VN",
+      "lat": 9.8333,
+      "lon": 106.25
+    },
+    {
+      "station_id": "VN_TIN_36",
+      "city": "Tỉnh Tuyên Quang",
+      "country": "VN",
+      "lat": 22.1167,
+      "lon": 105.25
+    },
+    {
+      "station_id": "VN_TIN_37",
+      "city": "Tỉnh Vĩnh Long",
+      "country": "VN",
+      "lat": 10.1667,
+      "lon": 106.0
+    },
+    {
+      "station_id": "VN_TIN_38",
+      "city": "Tỉnh Yên Bái",
+      "country": "VN",
+      "lat": 21.5,
+      "lon": 104.6667
+    },
+    {
+      "station_id": "VN_TIN_39",
+      "city": "Tỉnh Ðồng Nai",
+      "country": "VN",
+      "lat": 11.0,
+      "lon": 107.1667
+    },
+    {
+      "station_id": "VN_TIN_40",
+      "city": "Tỉnh Ðồng Tháp",
+      "country": "VN",
+      "lat": 10.6667,
+      "lon": 105.6667
+    },
+    {
+      "station_id": "VN_UON_01",
+      "city": "Uong Bi",
+      "country": "VN",
+      "lat": 21.0333,
+      "lon": 106.7833
+    },
+    {
+      "station_id": "VN_VIN_01",
+      "city": "Vinh Yen",
+      "country": "VN",
+      "lat": 21.31,
+      "lon": 105.5967
+    },
+    {
+      "station_id": "VN_VUN_01",
+      "city": "Vung Tau",
+      "country": "VN",
+      "lat": 10.346,
+      "lon": 107.0843
+    },
+    {
+      "station_id": "VN_XOM_01",
+      "city": "Xóm Yân Lạc Hâu",
+      "country": "VN",
+      "lat": 18.7333,
+      "lon": 105.6667
+    },
+    {
+      "station_id": "VN_YEN_01",
+      "city": "Yen Bai",
+      "country": "VN",
+      "lat": 21.7,
+      "lon": 104.8667
+    },
+    {
+      "station_id": "VN_APV_01",
+      "city": "Ấp Vạn Tự Tây",
+      "country": "VN",
+      "lat": 12.15,
+      "lon": 109.1
+    },
+    {
+      "station_id": "CN_BJS_01",
+      "city": "Beijing",
+      "country": "CN",
+      "lat": 39.9042,
+      "lon": 116.4074
+    },
+    {
+      "station_id": "CN_SHA_01",
+      "city": "Shanghai",
+      "country": "CN",
+      "lat": 31.2222,
+      "lon": 121.4581
+    },
+    {
+      "station_id": "CN_GUA_01",
+      "city": "Guangzhou",
+      "country": "CN",
+      "lat": 23.1167,
+      "lon": 113.25
+    },
+    {
+      "station_id": "CN_SHE_01",
+      "city": "Shenzhen",
+      "country": "CN",
+      "lat": 22.6177,
+      "lon": 114.1259
+    },
+    {
+      "station_id": "CN_CHE_01",
+      "city": "Chengdu",
+      "country": "CN",
+      "lat": 30.6667,
+      "lon": 104.0667
+    },
+    {
+      "station_id": "JP_TYO_01",
+      "city": "Tokyo",
+      "country": "JP",
+      "lat": 35.6762,
+      "lon": 139.6503
+    },
+    {
+      "station_id": "JP_OSA_01",
+      "city": "Osaka",
+      "country": "JP",
+      "lat": 35.95,
+      "lon": 137.2667
+    },
+    {
+      "station_id": "JP_YOK_01",
+      "city": "Yokohama",
+      "country": "JP",
+      "lat": 35.4478,
+      "lon": 139.6425
+    },
+    {
+      "station_id": "JP_NAG_01",
+      "city": "Nagoya",
+      "country": "JP",
+      "lat": 35.1815,
+      "lon": 136.9064
+    },
+    {
+      "station_id": "JP_SAP_01",
+      "city": "Sapporo",
+      "country": "JP",
+      "lat": 43.0642,
+      "lon": 141.3469
+    },
+    {
+      "station_id": "US_NEW_01",
+      "city": "New York",
+      "country": "US",
+      "lat": 43.0004,
+      "lon": -75.4999
+    },
+    {
+      "station_id": "US_LOS_01",
+      "city": "Los Angeles",
+      "country": "US",
+      "lat": 34.0522,
+      "lon": -118.2437
+    },
+    {
+      "station_id": "US_CHI_01",
+      "city": "Chicago",
+      "country": "US",
+      "lat": 41.85,
+      "lon": -87.65
+    },
+    {
+      "station_id": "US_HOU_01",
+      "city": "Houston",
+      "country": "US",
+      "lat": 37.3262,
+      "lon": -91.956
+    },
+    {
+      "station_id": "US_PHO_01",
+      "city": "Phoenix",
+      "country": "US",
+      "lat": 41.6111,
+      "lon": -87.6348
+    },
+    {
+      "station_id": "CA_TOR_01",
+      "city": "Toronto",
+      "country": "CA",
+      "lat": 43.7001,
+      "lon": -79.4163
+    },
+    {
+      "station_id": "CA_MON_01",
+      "city": "Montréal",
+      "country": "CA",
+      "lat": 45.5088,
+      "lon": -73.5878
+    },
+    {
+      "station_id": "CA_VAN_01",
+      "city": "Vancouver",
+      "country": "CA",
+      "lat": 49.2497,
+      "lon": -123.1193
+    },
+    {
+      "station_id": "CA_CAL_01",
+      "city": "Calgary",
+      "country": "CA",
+      "lat": 51.0501,
+      "lon": -114.0853
+    },
+    {
+      "station_id": "CA_OTT_01",
+      "city": "Ottawa",
+      "country": "CA",
+      "lat": 45.4112,
+      "lon": -75.6981
+    },
+    {
+      "station_id": "GB_LON_01",
+      "city": "London",
+      "country": "GB",
+      "lat": 51.5085,
+      "lon": -0.1257
+    },
+    {
+      "station_id": "GB_BIR_01",
+      "city": "Birmingham",
+      "country": "GB",
+      "lat": 52.4814,
+      "lon": -1.8998
+    },
+    {
+      "station_id": "GB_MAN_01",
+      "city": "Manchester",
+      "country": "GB",
+      "lat": 53.4809,
+      "lon": -2.2374
+    },
+    {
+      "station_id": "GB_GLA_01",
+      "city": "Glasgow",
+      "country": "GB",
+      "lat": 55.8651,
+      "lon": -4.2576
+    },
+    {
+      "station_id": "GB_LIV_01",
+      "city": "Liverpool",
+      "country": "GB",
+      "lat": 53.4106,
+      "lon": -2.9779
+    },
+    {
+      "station_id": "DE_BER_01",
+      "city": "Berlin",
+      "country": "DE",
+      "lat": 54.0333,
+      "lon": 10.45
+    },
+    {
+      "station_id": "DE_HAM_01",
+      "city": "Hamburg",
+      "country": "DE",
+      "lat": 53.55,
+      "lon": 10.0
+    },
+    {
+      "station_id": "DE_MUN_01",
+      "city": "Munich",
+      "country": "DE",
+      "lat": 48.1374,
+      "lon": 11.5755
+    },
+    {
+      "station_id": "DE_KOL_01",
+      "city": "Köln",
+      "country": "DE",
+      "lat": 50.9333,
+      "lon": 6.95
+    },
+    {
+      "station_id": "DE_FRA_01",
+      "city": "Frankfurt am Main",
+      "country": "DE",
+      "lat": 50.1167,
+      "lon": 8.6833
+    },
+    {
+      "station_id": "AU_SYD_01",
+      "city": "Sydney",
+      "country": "AU",
+      "lat": -33.8679,
+      "lon": 151.2073
+    },
+    {
+      "station_id": "AU_MEL_01",
+      "city": "Melbourne",
+      "country": "AU",
+      "lat": -37.814,
+      "lon": 144.9633
+    },
+    {
+      "station_id": "AU_BRI_01",
+      "city": "Brisbane",
+      "country": "AU",
+      "lat": -27.4679,
+      "lon": 153.0281
+    },
+    {
+      "station_id": "AU_PER_01",
+      "city": "Perth",
+      "country": "AU",
+      "lat": -31.9333,
+      "lon": 115.8333
+    },
+    {
+      "station_id": "AU_ADE_01",
+      "city": "Adelaide",
+      "country": "AU",
+      "lat": -34.9333,
+      "lon": 138.6
+    },
+    {
+      "station_id": "BR_SAO_01",
+      "city": "São Paulo",
+      "country": "BR",
+      "lat": -22.0,
+      "lon": -49.0
+    },
+    {
+      "station_id": "BR_RIO_01",
+      "city": "Rio de Janeiro",
+      "country": "BR",
+      "lat": -22.0,
+      "lon": -42.5
+    },
+    {
+      "station_id": "BR_BRA_01",
+      "city": "Brasília",
+      "country": "BR",
+      "lat": -3.8947,
+      "lon": -42.6942
+    },
+    {
+      "station_id": "BR_SAL_01",
+      "city": "Salvador",
+      "country": "BR",
+      "lat": -12.9711,
+      "lon": -38.5108
+    },
+    {
+      "station_id": "BR_FOR_01",
+      "city": "Fortaleza",
+      "country": "BR",
+      "lat": -3.7172,
+      "lon": -38.5431
+    },
+    {
+      "station_id": "ZA_JOH_01",
+      "city": "Johannesburg",
+      "country": "ZA",
+      "lat": -26.2023,
+      "lon": 28.0436
+    },
+    {
+      "station_id": "ZA_CAP_01",
+      "city": "Cape Town",
+      "country": "ZA",
+      "lat": -33.9258,
+      "lon": 18.4232
+    },
+    {
+      "station_id": "ZA_DUR_01",
+      "city": "Durban",
+      "country": "ZA",
+      "lat": -29.8579,
+      "lon": 31.0292
+    },
+    {
+      "station_id": "ZA_PRE_01",
+      "city": "Pretoria",
+      "country": "ZA",
+      "lat": -25.7449,
+      "lon": 28.1878
+    },
+    {
+      "station_id": "ZA_POR_01",
+      "city": "Port Elizabeth",
+      "country": "ZA",
+      "lat": -33.918,
+      "lon": 25.5701
+    },
+    {
+      "station_id": "AE_DUB_01",
+      "city": "Dubai",
+      "country": "AE",
+      "lat": 25.2582,
+      "lon": 55.3047
+    },
+    {
+      "station_id": "AE_ABU_01",
+      "city": "Abu Dhabi",
+      "country": "AE",
+      "lat": 24.4667,
+      "lon": 54.3667
+    },
+    {
+      "station_id": "AE_SHA_01",
+      "city": "Sharjah",
+      "country": "AE",
+      "lat": 25.3573,
+      "lon": 55.4033
+    },
+    {
+      "station_id": "AE_AJM_01",
+      "city": "Ajman City",
+      "country": "AE",
+      "lat": 25.4111,
+      "lon": 55.435
+    },
+    {
+      "station_id": "AE_ALA_01",
+      "city": "Al Ain City",
+      "country": "AE",
+      "lat": 24.1917,
+      "lon": 55.7606
+    }
   ]
 }
