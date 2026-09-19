@@ -41,6 +41,20 @@ def load_standard(standard: str = "VN_1459") -> dict:
         return json.load(f)
 
 
+def max_plausible(standard: str = "VN_1459") -> dict:
+    """Trần loại ngoại lai mỗi chất = mốc nồng độ ứng với I=500 trong breakpoint.
+    Dùng chung cho Pha 1 (batch) và streaming để hai làn cắt ngoại lai giống nhau."""
+    std = load_standard(standard)["pollutants"]
+    return {
+        "pm2_5": std["pm2_5"]["bp"][-1],
+        "pm10": std["pm10"]["bp"][-1],
+        "so2": std["so2"]["bp"][-1],
+        "no2": std["no2"]["bp"][-1],
+        "co": std["co"]["bp"][-1],
+        "o3": std["o3_1h"]["bp"][-1],
+    }
+
+
 def iaqi(concentration: Optional[float], pollutant: str, standard: str = "VN_1459") -> Optional[float]:
     """
     Tính sub-index cho MỘT chất. Trả None nếu thiếu dữ liệu.

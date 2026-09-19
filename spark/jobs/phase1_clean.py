@@ -31,7 +31,7 @@ from pyspark.sql import SparkSession, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, IntegerType, LongType, StringType, StructField, StructType
 
-from aqi_core.iaqi import load_standard
+from aqi_core.iaqi import max_plausible
 
 POLLUTANTS = ["pm2_5", "pm10", "o3", "no2", "so2", "co"]
 MAX_GAP_HOURS_TO_INTERPOLATE = 3
@@ -56,16 +56,8 @@ RAW_SCHEMA = StructType([
 
 
 def _max_plausible() -> dict:
-    """Trần loại ngoại lai = mốc nồng độ ứng với I=500 trong breakpoint VN_1459 (đã verify)."""
-    std = load_standard("VN_1459")["pollutants"]
-    return {
-        "pm2_5": std["pm2_5"]["bp"][-1],
-        "pm10": std["pm10"]["bp"][-1],
-        "so2": std["so2"]["bp"][-1],
-        "no2": std["no2"]["bp"][-1],
-        "co": std["co"]["bp"][-1],
-        "o3": std["o3_1h"]["bp"][-1],
-    }
+    """Trần loại ngoại lai VN_1459 — định nghĩa nằm ở aqi_core để streaming dùng chung."""
+    return max_plausible("VN_1459")
 
 
 def load_raw(spark: SparkSession, path: str):
