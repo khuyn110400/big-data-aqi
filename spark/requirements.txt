@@ -7,3 +7,5 @@ matplotlib>=3.8
 ipykernel>=6.29
 scikit-learn>=1.4
 nbconvert>=7.16
+# Tầng 3 dự báo (CNN-LSTM) — tuỳ chọn, nặng (~500 MB); thiếu thì ext_forecast.py tự bỏ qua tầng 3:
+# tensorflow-cpu>=2.16

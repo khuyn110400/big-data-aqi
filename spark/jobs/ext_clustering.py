@@ -1,18 +1,25 @@
 """
 NHÁNH MỞ RỘNG (ngoài lõi) — phân cụm vùng. NGƯỜI B · M4.
 
-Kế hoạch 3 tầng (đã chốt với người dùng — làm lần lượt, KHÔNG phải "chọn 1" như
-WORKPLAN gốc ghi, vì đã xác nhận chấp nhận tốn thêm thời gian):
-  Tầng 1        : K-means (Spark MLlib, native) — baseline. (fit_kmeans)
-  Tầng 2 (file này): GMM và Bisecting K-means (Spark MLlib, native) — chạy CẢ HAI
-                      rồi so silhouette với K-means để chọn thuật toán tốt nhất
-                      cho đúng dữ liệu này, không chọn bừa 1 trong 2.
-  Tầng 3 (TẠM HOÃN): DBSCAN/HDBSCAN — Spark MLlib KHÔNG có, sẽ chạy qua scikit-learn
-                      ở driver (dữ liệu (city, tháng) rất nhỏ, không cần phân tán).
-                      Tạm dừng ở tầng 2 — máy dev đã gặp OOM/treo nhiều lần khi chạy
-                      tầng 1+2 (RAM cạn kiệt do nhiều app khác mở cùng lúc), nên hoãn
-                      thêm tầng 3 cho tới khi có máy/server rảnh hơn. Tầng 1+2 đã xong,
-                      test đầy đủ, không bị ảnh hưởng bởi quyết định hoãn này.
+Kế hoạch 3 tầng (đã chốt với người dùng — làm CẢ BA rồi so, KHÔNG phải "chọn 1" như
+WORKPLAN gốc ghi, vì đã xác nhận chấp nhận tốn thêm thời gian). Cả 3 tầng chạy trong file này:
+  Tầng 1: K-means (Spark MLlib) — baseline. (fit_kmeans)
+  Tầng 2: GMM và Bisecting K-means (Spark MLlib) — chạy CẢ HAI rồi so với K-means để
+          chọn thuật toán hợp dữ liệu, không chọn bừa. (fit_gmm, fit_bisecting_kmeans)
+  Tầng 3: DBSCAN và HDBSCAN (scikit-learn ở driver — Spark MLlib không có; dữ liệu
+          (city, tháng) rất nhỏ nên không cần phân tán). (fit_dbscan, fit_hdbscan)
+  compare_clustering_algorithms() chạy cả 5 và chọn thuật toán thắng theo silhouette.
+
+SO SÁNH CÔNG BẰNG GIỮA 5 THUẬT TOÁN:
+  - Silhouette của Spark (ClusteringEvaluator) mặc định dùng khoảng cách squaredEuclidean,
+    sklearn dùng Euclidean -> hai con số KHÔNG so được với nhau. Nên bảng so sánh cuối tính
+    lại silhouette cho cả 5 bằng common_silhouette() (Euclidean, cùng ma trận feature đã
+    chuẩn hoá). Silhouette nội bộ của Spark chỉ còn dùng để chọn k trong TỪNG thuật toán.
+  - DBSCAN/HDBSCAN gán nhãn -1 cho điểm nhiễu; silhouette bỏ các điểm này nên thuật toán
+    vứt nhiều điểm sẽ được điểm cao giả tạo. Vì vậy chỉ nhận cấu hình có tỉ lệ nhiễu
+    <= MAX_NOISE_FRACTION, và bảng tổng kết in kèm tỉ lệ nhiễu của mỗi thuật toán.
+  - Silhouette còn thưởng cho việc băm thành nhiều cụm siêu nhỏ, nên tầng 3 bị giới hạn
+    <= MAX_CLUSTERS cụm, cùng ngân sách số cụm với dải k của tầng 1/2.
 
 Feature: avg_pm2_5, avg_pm10, avg_o3, avg_no2 (trung bình theo (city, tháng))
          + lat, lon, tháng (1-12).
@@ -32,13 +39,16 @@ QUYẾT ĐỊNH THIẾT KẾ:
 
 Input : /air-quality/aqi/        (output Pha 2, schema C3)
 Output: /air-quality/ext/clusters/  — city, month, avg_*, cluster label
+        --json-out <file>  — thêm file ext_clusters.json cho demo (schema C8.1 trong CONTRACTS.md)
 
 Chạy local:
-  python jobs/ext_clustering.py --input /tmp/aqi --output /tmp/clusters
+  python jobs/ext_clustering.py --input /tmp/aqi --output /tmp/clusters --json-out /tmp/ext_clusters.json
 """
 import argparse
+import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 _SPARK_ROOT = str(Path(__file__).resolve().parent.parent)
@@ -53,6 +63,17 @@ from pyspark.sql import functions as F
 
 FEATURE_COLS = ["avg_pm2_5", "avg_pm10", "avg_o3", "avg_no2", "lat", "lon", "month"]
 K_CANDIDATES = [2, 3, 4, 5, 6]
+
+# Tầng 3: lưới tham số quét (rẻ vì chỉ ~vài nghìn điểm city x tháng); lưới rộng để dùng được
+# cả với dữ liệu mẫu 20 điểm lẫn dữ liệu thật ~2.400 điểm.
+DBSCAN_EPS = (0.3, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0)
+DBSCAN_MIN_SAMPLES = (2, 3, 5, 8)
+HDBSCAN_MIN_CLUSTER_SIZE = (2, 3, 5, 8, 12)
+MAX_NOISE_FRACTION = 0.2
+# Tầng 1/2 chỉ thử k <= max(K_CANDIDATES); tầng 3 cũng bị giới hạn số cụm như vậy. Không có
+# giới hạn này silhouette thưởng cho việc băm thành nhiều cụm siêu nhỏ (đã gặp: HDBSCAN
+# min_cluster_size=2 cho 7 cụm, silhouette 0.87, thắng cách chia đúng 2 cụm ở 0.74).
+MAX_CLUSTERS = max(K_CANDIDATES)
 
 
 def build_city_month_features(df):
@@ -146,31 +167,143 @@ def fit_bisecting_kmeans(df, k=None, seed=42):
     return _fit_generic(df, BisectingKMeans, k=k, seed=seed)
 
 
+def common_silhouette(X, labels):
+    """Silhouette Euclidean bỏ điểm nhiễu (-1) — MỘT thước đo chung cho cả 5 thuật toán.
+    Trả None nếu không có >= 2 cụm thật (sklearn không tính được)."""
+    from sklearn.metrics import silhouette_score
+
+    mask = labels != -1
+    n_real_clusters = len(set(labels[mask]))
+    if n_real_clusters < 2 or int(mask.sum()) <= n_real_clusters:
+        return None
+    return float(silhouette_score(X[mask], labels[mask]))
+
+
+def _matrix_and_labels(result_df):
+    """Ma trận feature đã chuẩn hoá + nhãn cụm, lấy trong CÙNG một lần collect nên thứ tự khớp."""
+    import numpy as np
+
+    pdf = result_df.select("features", "cluster").toPandas()
+    return np.vstack([v.toArray() for v in pdf["features"]]), pdf["cluster"].to_numpy()
+
+
+def _sweep_density(X, name, candidates, fit_labels):
+    """Quét lưới tham số, chọn silhouette cao nhất trong số cấu hình có tỉ lệ nhiễu hợp lệ."""
+    best = None
+    print(f"\n=== {name}: quét tham số ===")
+    for params in candidates:
+        try:
+            labels = fit_labels(X, **params)
+        except ValueError:
+            continue  # tham số không hợp lệ với số điểm hiện có (vd min_cluster_size > n)
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        noise = float((labels == -1).mean())
+        score = common_silhouette(X, labels)
+        shown = f"{score:.4f}" if score is not None else "N/A"
+        print(f"  {params}: n_cum={n_clusters}, nhieu={noise:.0%}, silhouette={shown}")
+        valid = noise <= MAX_NOISE_FRACTION and n_clusters <= MAX_CLUSTERS
+        if score is not None and valid and (best is None or score > best[0]):
+            best = (score, params, labels)
+    if best is None:
+        raise ValueError(
+            f"{name}: không cấu hình nào cho 2..{MAX_CLUSTERS} cụm thật với nhiễu <= {MAX_NOISE_FRACTION:.0%}"
+        )
+    print(f"-> Chọn {best[1]} (silhouette={best[0]:.4f})\n")
+    return best
+
+
+def _fit_density(df, name, candidates, fit_labels):
+    import numpy as np
+
+    scaled = _assemble_and_scale(df)
+    pdf = scaled.drop("features_raw").toPandas()
+    X = np.vstack([v.toArray() for v in pdf["features"]])
+    score, params, labels = _sweep_density(X, name, candidates, fit_labels)
+    pdf["cluster"] = labels
+    result = df.sparkSession.createDataFrame(pdf.drop(columns=["features"]))
+    return result, None, params, score
+
+
+def fit_dbscan(df, seed=42):
+    """Tầng 3 — DBSCAN. Trả (result, None, tham_số, silhouette); nhãn -1 = điểm nhiễu."""
+    from sklearn.cluster import DBSCAN
+
+    candidates = [{"eps": e, "min_samples": m} for e in DBSCAN_EPS for m in DBSCAN_MIN_SAMPLES]
+    return _fit_density(df, "DBSCAN", candidates, lambda X, **p: DBSCAN(**p).fit_predict(X))
+
+
+def fit_hdbscan(df, seed=42):
+    """Tầng 3 — HDBSCAN (sklearn >= 1.3). Trả (result, None, tham_số, silhouette)."""
+    from sklearn.cluster import HDBSCAN
+
+    candidates = [{"min_cluster_size": m} for m in HDBSCAN_MIN_CLUSTER_SIZE]
+    return _fit_density(df, "HDBSCAN", candidates, lambda X, **p: HDBSCAN(**p).fit_predict(X))
+
+
 def compare_clustering_algorithms(df, seed=42):
-    """Chạy K-means (tầng 1) + GMM + Bisecting K-means (tầng 2), so silhouette,
-    trả về (tên thuật toán thắng, result, model, k, silhouette) — không chọn bừa
-    GMM hay Bisecting, để dữ liệu tự quyết định thuật toán nào hợp hơn."""
-    candidates = {
-        "KMeans": fit_kmeans,
-        "GaussianMixture": fit_gmm,
-        "BisectingKMeans": fit_bisecting_kmeans,
-    }
+    """Chạy cả 5 thuật toán (K-means; GMM, Bisecting; DBSCAN, HDBSCAN), so bằng cùng một
+    silhouette (common_silhouette), trả về (tên thắng, result, model, tham số, silhouette).
+    model là None nếu thắng là DBSCAN/HDBSCAN. Thuật toán không chạy được trên dữ liệu này
+    bị bỏ qua thay vì làm hỏng cả lệnh so sánh."""
+    spark_algos = {"KMeans": fit_kmeans, "GaussianMixture": fit_gmm, "BisectingKMeans": fit_bisecting_kmeans}
+    density_algos = {"DBSCAN": fit_dbscan, "HDBSCAN": fit_hdbscan}
+
     runs = {}
-    print("\n########## So sánh thuật toán phân cụm (Tầng 1 vs Tầng 2) ##########")
-    for name, fn in candidates.items():
-        result, model, k, silhouette = fn(df, seed=seed)
-        runs[name] = (result, model, k, silhouette)
+    print("\n########## So sánh thuật toán phân cụm (Tầng 1 + 2 + 3) ##########")
+    for name, fn in spark_algos.items():
+        result, model, k, _ = fn(df, seed=seed)
+        X, labels = _matrix_and_labels(result)
+        runs[name] = (result, model, k, common_silhouette(X, labels), len(set(labels)), 0.0)
 
-    print("=== Tổng kết ===")
-    for name, (_, _, k, silhouette) in runs.items():
-        print(f"  {name:<16}: k={k}, silhouette={silhouette:.4f}")
+    for name, fn in density_algos.items():
+        try:
+            result, model, params, score = fn(df, seed=seed)
+        except ValueError as exc:
+            print(f"  {name}: bỏ qua ({exc})")
+            continue
+        labels = result.select("cluster").toPandas()["cluster"].to_numpy()
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        runs[name] = (result, model, params, score, n_clusters, float((labels == -1).mean()))
 
-    best_name = max(runs, key=lambda n: runs[n][3])
-    best_result, best_model, best_k, best_silhouette = runs[best_name]
-    print(f"-> Thắng: {best_name} (k={best_k}, silhouette={best_silhouette:.4f})")
+    scored = {n: r for n, r in runs.items() if r[3] is not None}
+    if not scored:
+        raise ValueError("Không thuật toán nào cho >= 2 cụm thật trên dữ liệu này")
+
+    print("=== Tổng kết (cùng thước đo: silhouette Euclidean, bỏ điểm nhiễu) ===")
+    print(f"  {'Thuật toán':<17}{'Tham số':<38}{'Số cụm':>7}{'Nhiễu':>8}{'Silhouette':>12}")
+    for name, (_, _, params, score, n_clusters, noise) in runs.items():
+        shown = f"{score:.4f}" if score is not None else "N/A"
+        print(f"  {name:<17}{str(params):<38}{n_clusters:>7}{noise:>8.0%}{shown:>12}")
+
+    best_name = max(scored, key=lambda n: scored[n][3])
+    best_result, best_model, best_params, best_silhouette, _, _ = scored[best_name]
+    print(f"-> Thắng: {best_name} ({best_params}, silhouette={best_silhouette:.4f})")
     print("#" * 70 + "\n")
 
-    return best_name, best_result, best_model, best_k, best_silhouette
+    return best_name, best_result, best_model, best_params, best_silhouette
+
+
+CLUSTER_JSON_SCHEMA_VERSION = "1.0"
+CLUSTER_JSON_COLS = ["city", "country", "month", "lat", "lon", "avg_pm2_5", "avg_pm10", "avg_o3", "avg_no2", "cluster"]
+
+
+def export_clusters_json(result, algorithm, params, silhouette, path):
+    """Ghi ext_clusters.json (schema C8.1). params: dict, hoặc số k (thuật toán Spark) -> {"k": k}.
+    cluster = -1 là điểm nhiễu của DBSCAN/HDBSCAN; n_clusters không tính nhóm nhiễu."""
+    pdf = result.select(*CLUSTER_JSON_COLS).orderBy("cluster", "city", "month").toPandas()
+    rows = json.loads(pdf.round(4).to_json(orient="records"))  # NaN -> null, kiểu số chuẩn của JSON
+    payload = {
+        "schema_version": CLUSTER_JSON_SCHEMA_VERSION,
+        "generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "algorithm": algorithm,
+        "params": params if isinstance(params, dict) else {"k": params},
+        "silhouette": None if silhouette is None else round(float(silhouette), 4),
+        "n_clusters": len({r["cluster"] for r in rows} - {-1}),
+        "rows": rows,
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    return payload
 
 
 def main():
@@ -178,6 +311,8 @@ def main():
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--k", type=int, default=None, help="Số cụm — bỏ trống để tự chọn bằng silhouette score")
+    ap.add_argument("--json-out", default=None,
+                    help="đường dẫn file ext_clusters.json (trong container, không phải HDFS) cho demo")
     args = ap.parse_args()
 
     spark = (
@@ -195,10 +330,11 @@ def main():
     if args.k is not None:
         # k co dinh, nguoi dung tu chon -> giu tang 1 (KMeans) don gian, khong so sanh
         result, model, k, silhouette = fit_kmeans(features, k=args.k)
+        best_name = "KMeans"
         print(f"K-means k={k}, silhouette={silhouette:.4f}")
     else:
         best_name, result, model, k, silhouette = compare_clustering_algorithms(features)
-        print(f"Dùng kết quả: {best_name} (k={k}, silhouette={silhouette:.4f})")
+        print(f"Dùng kết quả: {best_name} (tham số={k}, silhouette={silhouette:.4f})")
 
     print("\n=== Phân cụm theo thành phố/tháng ===")
     result.select("city", "month", "avg_pm2_5", "avg_pm10", "cluster").orderBy("cluster", "city", "month").show(50, truncate=False)
@@ -210,6 +346,10 @@ def main():
         .parquet(args.output)
     )
     print(f"Da ghi ket qua vao {args.output}")
+
+    if args.json_out:
+        payload = export_clusters_json(result, best_name, k, silhouette, args.json_out)
+        print(f"Da ghi {args.json_out}: {payload['algorithm']}, {payload['n_clusters']} cum, {len(payload['rows'])} dong")
 
     spark.stop()
 

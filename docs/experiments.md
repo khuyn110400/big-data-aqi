@@ -90,38 +90,49 @@ và đánh dấu `missing` — không bịa số liệu qua khối gap dài.
 
 ## 5. Nhánh mở rộng M4 — Phân cụm & Dự báo
 
-Đo trên `data/samples/` (5 trạm, ~4 tháng dữ liệu). **CHƯA phải số liệu chính thức cuối
-cùng** — khi Người A có backfill thật (200 trạm × 3-5 năm), phải chạy lại toàn bộ để lấy
-số liệu chính thức cho báo cáo. Chạy lại bằng: `python jobs/ext_clustering.py --input
-<aqi_parquet> --output <dir>` và `python jobs/ext_forecast.py --input <aqi_parquet>
---output <dir>` (xem `spark/jobs/ext_clustering.ipynb`, `ext_forecast.ipynb` để chạy
-từng bước có giải thích).
+Đo trên `data/samples/` (5 trạm, ~4 tháng dữ liệu, **sinh giả** — xem `data/samples/README.md`).
+**CHƯA phải số liệu chính thức cuối cùng** — khi Người A có backfill thật (200 trạm × 3-5
+năm), phải chạy lại toàn bộ để lấy số liệu chính thức cho báo cáo. Cả 3 tầng của mỗi nhánh
+chạy trực tiếp trong `ext_clustering.py` / `ext_forecast.py` (không còn bước Kaggle):
+`python jobs/ext_clustering.py --input <aqi_parquet> --output <dir>` và
+`python jobs/ext_forecast.py --input <aqi_parquet> --output <dir>` (xem
+`docs/B_TO_A_RUNBOOK.md`).
 
 ### 5.1. Phân cụm vùng — so sánh 5 thuật toán (Tầng 1+2+3)
 
-Tầng 3 (DBSCAN/HDBSCAN) chạy trên Kaggle qua `spark/jobs/kaggle_dbscan_hdbscan.py` (dữ
-liệu xuất bằng `export_for_kaggle.py`) — xem hướng dẫn trong docstring 2 file đó.
+Tầng 3 (DBSCAN/HDBSCAN, scikit-learn ở driver) chạy cùng file với tầng 1+2. Cả 5 thuật toán
+được đo bằng **cùng một silhouette** (Euclidean, bỏ điểm nhiễu, cùng ma trận feature đã
+chuẩn hoá), có kèm số cụm và tỉ lệ nhiễu:
 
-| Thuật toán | Tham số | Silhouette | Ghi chú |
-|---|---|---|---|
-| **K-means** (Tầng 1) | k=2 | **0.7127** | 🏆 Thắng |
-| DBSCAN (Tầng 3) | eps=1.5, min_samples=3 | 0.5017 | |
-| Bisecting K-means (Tầng 2) | k=4 | 0.4520 | |
-| HDBSCAN (Tầng 3) | min_cluster_size=2 | 0.4366 | |
-| GMM (Tầng 2) | k=2 | 0.3287 | |
+| Thuật toán | Tham số | Số cụm | Nhiễu | Silhouette | Ghi chú |
+|---|---|---|---|---|---|
+| **K-means** (Tầng 1) | k=2 | 2 | 0% | **0.4909** | 🏆 Thắng |
+| DBSCAN (Tầng 3) | eps=2.0, min_samples=2 | 3 | 5% | 0.4366 | |
+| HDBSCAN (Tầng 3) | min_cluster_size=3 | 3 | 5% | 0.4366 | |
+| Bisecting K-means (Tầng 2) | k=4 | 4 | 0% | 0.2993 | |
+| GMM (Tầng 2) | k=2 | 2 | 0% | 0.2494 | |
 
-k/eps/min_samples/min_cluster_size đều được chọn tự động bằng silhouette score trên 1 dải
-giá trị cho từng thuật toán (không hardcode). Kết quả: New Delhi tách thành 1 cụm riêng
-(ô nhiễm vượt trội, hệ số ×7 so với nền TP.HCM trong dữ liệu mẫu), các thành phố còn lại
-gộp 1 cụm.
+k/eps/min_samples/min_cluster_size đều chọn tự động bằng silhouette trên một dải giá trị
+cho từng thuật toán (không hardcode). Kết quả: New Delhi tách thành 1 cụm riêng (ô nhiễm
+vượt trội, hệ số ×7 so với nền TP.HCM do bộ sinh dữ liệu mẫu đặt sẵn), các thành phố còn
+lại gộp 1 cụm.
 
-**Nhận xét:** K-means vượt trội hẳn (0.71 so với nhóm còn lại 0.33-0.50). DBSCAN/HDBSCAN
-vốn mạnh ở việc tìm cụm hình dạng bất kỳ (không lồi) và tự phát hiện nhiễu, nhưng với chỉ
-**20 điểm dữ liệu** (5 thành phố × 4 tháng) — cấu trúc đơn giản kiểu "1 outlier tách biệt +
-phần còn lại gộp cụm" — không có đủ "đất dụng võ" để 2 thuật toán này thể hiện ưu thế; đây
-đúng là kiểu bài toán mà K-means (dựa trên centroid, khoảng cách Euclidean) xử lý tối ưu.
-Silhouette trên mẫu quá nhỏ này cũng không đủ tin cậy để kết luận chắc chắn — khi có data
-thật (200 trạm, nhiều năm, nhiều nhóm khí hậu phức tạp hơn), thứ hạng này có thể đổi khác.
+**Đính chính so với bản đo trước:** bản cũ ghi K-means 0.7127 và DBSCAN 0.5017 vào cùng một
+bảng, nhưng hai con số dùng **hai thước đo khác nhau** — `ClusteringEvaluator` của Spark
+mặc định dùng khoảng cách *squared* Euclidean, còn scikit-learn dùng Euclidean. Cùng cách
+chia cụm của K-means (k=2), silhouette kiểu Spark là 0.7127 còn kiểu Euclidean là 0.4909.
+Bảng trên đo lại cả 5 bằng cùng một thước đo; khoảng cách giữa K-means và nhóm còn lại nhỏ
+hơn nhiều so với kết luận "K-means vượt trội hẳn" trong bản cũ.
+
+Hai ràng buộc khi chọn cấu hình tầng 3 (giải thích trong docstring `ext_clustering.py`):
+tỉ lệ nhiễu <= 20% (silhouette bỏ điểm nhiễu nên thuật toán vứt nhiều điểm sẽ được điểm cao
+giả tạo) và số cụm <= 6 (cùng ngân sách với dải k của tầng 1/2 — không giới hạn thì silhouette
+thưởng cho việc băm thành nhiều cụm siêu nhỏ; đã gặp HDBSCAN `min_cluster_size=2` cho 7 cụm,
+silhouette 0.87, thắng cách chia đúng 2 cụm).
+
+**Nhận xét:** với chỉ **20 điểm** (5 thành phố × 4 tháng) và cấu trúc "1 điểm ngoại lai
+tách biệt + phần còn lại gộp cụm", chênh lệch giữa các thuật toán không đủ tin cậy để kết
+luận. Khi có data thật (200 trạm, nhiều năm, nhiều nhóm khí hậu), thứ hạng có thể đổi khác.
 
 **Phát hiện kỹ thuật đáng chú ý** (đã sửa, ghi trong code): `StandardScaler(withMean=True)`
 làm `BisectingKMeans` của Spark MLlib suy biến về đúng 1 cụm bất kể k/seed — đã đổi sang
@@ -130,28 +141,27 @@ chuyển đều, chỉ có lợi cho BisectingKMeans).
 
 ### 5.2. Dự báo AQI 24h — so sánh 3 tầng (SGD → Random Forest → CNN-LSTM)
 
-Tầng 3 (CNN-LSTM) chạy trên Kaggle (GPU) qua `spark/jobs/kaggle_cnn_lstm.py` (dữ liệu
-xuất bằng `export_for_kaggle.py` — chuỗi 24h AQI liên tiếp, khác lag rời rạc của tầng 1/2).
+Tầng 3 (CNN-LSTM, TensorFlow/Keras ở driver) chạy cùng file với tầng 1+2; input là chuỗi 24h
+AQI liên tiếp (`build_sequence_windows`), khác lag rời rạc của tầng 1/2. Nhãn được chuẩn hoá
+khi train (bản Kaggle cũ không chuẩn hoá nên hội tụ chậm), nên số tầng 3 dưới đây **không**
+tái hiện số cũ (RMSE 31.69). Số chuỗi đưa vào bị giới hạn bằng `--cnn-max-rows`.
 
 | Model | RMSE | MAE | R² | n_test |
 |---|---|---|---|---|
 | SGDRegressor online (Tầng 1) | 32.05 | **20.56** | 0.5382 | 1.154 |
-| Random Forest (Tầng 2) | 31.87 | 20.64 | 0.5431 | 1.154 |
-| CNN-LSTM (Tầng 3) | **31.69** | 21.53 | **0.5480** | 1.157 |
+| Random Forest (Tầng 2) | **31.87** | 20.64 | **0.5431** | 1.154 |
+| CNN-LSTM (Tầng 3) | 32.11 | 21.26 | 0.5359 | 1.157 |
 | *Đối chiếu*: LaSVM, paper Ghaemi 2015 | — | — | *~0.81* | *(data khác, không so trực tiếp)* |
 
 Train/test split theo thời gian (3 tháng đầu train, 1 tháng cuối test) — không random, tránh
 rò rỉ tương lai vào quá khứ.
 
-**Nhận xét về xu hướng 3 tầng:** RMSE và R² cải thiện **đơn điệu** qua 3 tầng (đúng kỳ
-vọng — mô hình phức tạp hơn → khá hơn), nhưng **MAE lại tệ dần** (20.56 → 20.64 → 21.53).
-Đây không phải nghịch lý: `kaggle_cnn_lstm.py` compile với `loss="mse"` — mô hình tối ưu
-theo sai số bình phương (khớp đúng mục tiêu RMSE), không phải MAE. RMSE phạt nặng sai số
-lớn hơn MAE, nên CNN-LSTM "hy sinh" độ chính xác trung bình trên phần lớn dự báo để giảm
-các sai số lớn/bất thường — đặc điểm cố hữu của việc train bằng MSE loss, không phải lỗi
-mô hình. Cải thiện tổng thể qua 3 tầng khá khiêm tốn (RMSE giảm ~1.1%, R² tăng ~1.8%) —
-sample 4 tháng/5 trạm quá nhỏ để độ phức tạp thêm của RF/CNN-LSTM phát huy hết lợi thế;
-cần data thật (200 trạm × 3-5 năm) để thấy chênh lệch rõ hơn.
+**Nhận xét:** ba tầng chênh nhau chưa đến 1% RMSE (31.87 – 32.11) trên 1.154 dòng test, nên
+với dữ liệu mẫu này **không thể kết luận tầng nào tốt hơn** — bản đo Kaggle trước đó cho
+CNN-LSTM nhỉnh hơn (31.69) nhưng chênh lệch cỡ này nằm trong nhiễu giữa các lần huấn luyện.
+CNN-LSTM train bằng `loss="mse"` nên bám RMSE hơn MAE. Sample 4 tháng/5 trạm quá nhỏ để độ
+phức tạp thêm của RF/CNN-LSTM phát huy; cần data thật (200 trạm × 3-5 năm) để thấy chênh lệch
+rõ hơn, và nên thêm baseline đơn giản "AQI cùng giờ hôm qua" để có lý do biện minh cho mô hình.
 
 **Feature importance (Random Forest):**
 
