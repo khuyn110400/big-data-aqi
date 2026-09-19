@@ -2,7 +2,7 @@
 Unit test cho phase1_clean.py — NGƯỜI B.
 
 Test từng hàm riêng lẻ trên DataFrame nhỏ dựng tay, không chạy toàn bộ job trên
-data/samples/ (việc đó đã verify thủ công qua phase1_dev.ipynb + chạy CLI).
+data/samples/ (việc đó đã verify thủ công bằng cách chạy CLI trên data/samples/).
 """
 import pytest
 from pyspark.sql import functions as F
