@@ -15,7 +15,8 @@
 #
 # Lưu ý WSL2: cấp tối thiểu 10GB RAM trong C:\Users\<user>\.wslconfig
 #             nếu không HBase RegionServer sẽ chết ngẫu nhiên.
-# Trên Apple Silicon: đọc docs/ARM64-APPLE-SILICON.md trước khi đụng file này.
+# Máy Mac chip Apple không chạy đủ stack này: image Hadoop/HBase chỉ có bản amd64.
+# Xem docs/cai-dat.md để biết máy nào chạy phần nào.
 
 name: aqi-bigdata
 
@@ -148,8 +149,8 @@ services:
       ZOO_MY_ID: 1
 
   # HBase 1.2.6: image cũ nhưng ổn định, tested chung với bde2020 hadoop stack.
-  # KHÔNG dùng COMPRESSION => 'SNAPPY' ở scripts/03_init_hbase.sh (xem docs/ARM64-APPLE-SILICON.md
-  # §"Hai chỗ phải sửa" — vấn đề native lib không chỉ riêng arm64, dùng GZ hoặc NONE cho an toàn).
+  # Khi tạo bảng ở scripts/03_init_hbase.sh không dùng COMPRESSION => 'SNAPPY': Snappy cần thư viện
+  # native mà image này thường không có, RegionServer sẽ không mở được bảng. Dùng GZ hoặc không nén.
   # Kiểm tra: mở http://localhost:16010 , hoặc docker exec -it hbase-master hbase shell <<< "status"
   hbase-master:
     image: bde2020/hbase-master:1.0.0-hbase1.2.6
