@@ -4,15 +4,19 @@
 
 ## 1. Quy mô dữ liệu thu thập
 
+Nguồn: `Big_Data_AQI_Task_A_Data_Platform_FINAL.docx` §3.3 (audit tầng raw sau khi backfill
+hoàn tất, trước lần chạy Pha 1→2→3 của tag `final-run-stable`). A kết luận "không cần chạy
+lại full backfill", nên số liệu này áp dụng cho cả raw dùng trong lần chạy final.
+
 | Chỉ tiêu | Giá trị |
 |---|---|
-| Số điểm quan trắc | |
-| Khoảng thời gian | |
-| Tổng bản ghi thô | |
-| Dung lượng raw (.jsonl.gz) | |
-| Dung lượng sau Pha 2 (parquet) | |
-| Thời gian backfill | |
-| Số API call đã dùng | |
+| Số điểm quan trắc | 200 (khớp `collector/config/cities.json`) |
+| Khoảng thời gian | 2021-09-01 → 2026-09-01 (21 cửa sổ ~90 ngày, 21/21 hoàn tất) |
+| Tổng bản ghi thô | 8.576.904 (97,80% của kỳ vọng 8.769.408; source gap 192.504 = 2,20%, xác nhận là thiếu dữ liệu nguồn OpenWeather, không phải lỗi pipeline) |
+| Dung lượng raw (.jsonl.gz) | 279,4 MB (21.805 file) |
+| Dung lượng sau Pha 2 (parquet) | *(chưa có — cần A chạy `hdfs dfs -du -s -h /air-quality/aqi`, xem `docs/B_TO_A_RUNBOOK.md` mục 1)* |
+| Thời gian backfill | *(không đo được — docx không ghi elapsed time; quá trình backfill bị ngắt và chạy lại nhiều lượt `--resume` cách nhau không rõ khoảng thời gian, nên "chạy liên tục mất bao lâu" không còn ý nghĩa rõ ràng)* |
+| Số API call đã dùng | ≥ 4.200 (ước tính lý thuyết: 200 trạm × 21 cửa sổ, mỗi cửa sổ đúng 1 call nếu không lỗi) — **không phải số đo thực**, vì `call_count` tăng ở CẢ lần gọi bị lỗi phải retry (`owm_client.py`), và mỗi lượt `--resume` khởi tạo `OwmClient` mới nên bộ đếm reset về 0 mỗi lần chạy lại. Docx chỉ ghi được `api_calls_this_run=4.000` của đúng lượt `--resume` cuối, không phải tổng cộng dồn. |
 
 ## 2. Scalability của Pha 2
 
@@ -90,80 +94,112 @@ và đánh dấu `missing` — không bịa số liệu qua khối gap dài.
 
 ## 5. Nhánh mở rộng M4 — Phân cụm & Dự báo
 
-Đo trên `data/samples/` (5 trạm, ~4 tháng dữ liệu, **sinh giả** — xem `data/samples/README.md`).
-**CHƯA phải số liệu chính thức cuối cùng** — khi Người A có backfill thật (200 trạm × 3-5
-năm), phải chạy lại toàn bộ để lấy số liệu chính thức cho báo cáo. Cả 3 tầng của mỗi nhánh
-chạy trực tiếp trong `ext_clustering.py` / `ext_forecast.py` (không còn bước Kaggle):
-`python jobs/ext_clustering.py --input <aqi_parquet> --output <dir>` và
-`python jobs/ext_forecast.py --input <aqi_parquet> --output <dir>` (xem
-`docs/B_TO_A_RUNBOOK.md`).
+**Số liệu chính thức**, đo trên dữ liệu thật (200 trạm, xem §1) sau khi Người A chạy Pha 1→2→3
+và chạy `ext_clustering.py` / `ext_forecast.py` trên toàn bộ `/air-quality/aqi/` (tag
+`final-run-stable`, theo đúng lệnh trong `docs/B_TO_A_RUNBOOK.md` mục 4). Kết quả xuất ra
+`final_results/json/ext_clusters.json` (sinh 2026-09-20T00:49:20Z) và
+`ext_forecast_backtest.json` (sinh 2026-09-20T01:17:08Z), phục vụ qua `/ext/clusters` và
+`/ext/forecast` (CONTRACTS.md §C8). Thay cho bản đo trên `data/samples/` (5 trạm, ~4 tháng, dữ
+liệu sinh giả) ở các lần đo trước.
 
-### 5.1. Phân cụm vùng — so sánh 5 thuật toán (Tầng 1+2+3)
+### 5.1. Phân cụm vùng — K-means (k=3) thắng
 
-Tầng 3 (DBSCAN/HDBSCAN, scikit-learn ở driver) chạy cùng file với tầng 1+2. Cả 5 thuật toán
-được đo bằng **cùng một silhouette** (Euclidean, bỏ điểm nhiễu, cùng ma trận feature đã
-chuẩn hoá), có kèm số cụm và tỉ lệ nhiễu:
+| Thuật toán thắng | Tham số | Số cụm | Silhouette |
+|---|---|---|---|
+| **K-means** | k=3 | 3 | **0.3547** |
 
-| Thuật toán | Tham số | Số cụm | Nhiễu | Silhouette | Ghi chú |
-|---|---|---|---|---|---|
-| **K-means** (Tầng 1) | k=2 | 2 | 0% | **0.4909** | 🏆 Thắng |
-| DBSCAN (Tầng 3) | eps=2.0, min_samples=2 | 3 | 5% | 0.4366 | |
-| HDBSCAN (Tầng 3) | min_cluster_size=3 | 3 | 5% | 0.4366 | |
-| Bisecting K-means (Tầng 2) | k=4 | 4 | 0% | 0.2993 | |
-| GMM (Tầng 2) | k=2 | 2 | 0% | 0.2494 | |
+`compare_clustering_algorithms()` chạy cả 5 thuật toán (K-means, GMM, Bisecting K-means,
+DBSCAN, HDBSCAN) và chọn theo silhouette Euclidean chung (xem cách đo ở lần chạy trên dữ liệu
+mẫu bên dưới). **Hạn chế cần nêu rõ:** `export_clusters_json()` chỉ ghi lại kết quả của thuật
+toán thắng, không ghi bảng so sánh đầy đủ; log console (nơi in bảng `=== Tổng kết ===` của cả 5
+thuật toán) không được lưu lại. Vì vậy không biết K-means thắng sát nút hay cách biệt các thuật
+toán còn lại bao nhiêu trên dữ liệu thật — **cần sửa `export_clusters_json` để ghi thêm bảng so
+sánh, rồi chạy lại** (rẻ: chỉ 2.400 dòng, không cần chạy lại Pha 1-3).
 
-k/eps/min_samples/min_cluster_size đều chọn tự động bằng silhouette trên một dải giá trị
-cho từng thuật toán (không hardcode). Kết quả: New Delhi tách thành 1 cụm riêng (ô nhiễm
-vượt trội, hệ số ×7 so với nền TP.HCM do bộ sinh dữ liệu mẫu đặt sẵn), các thành phố còn
-lại gộp 1 cụm.
+**Đánh giá theo thang chuẩn (Kaufman & Rousseeuw):** 0.3547 rơi vào khoảng 0.26–0.50, tức
+**"cấu trúc yếu"** — cụm có tồn tại nhưng không tách biệt rõ ràng, không đạt mức "tốt" (>0.5)
+theo tiêu chí thống kê chặt. Không nên báo cáo con số này như một phân cụm rõ nét.
 
-**Đính chính so với bản đo trước:** bản cũ ghi K-means 0.7127 và DBSCAN 0.5017 vào cùng một
-bảng, nhưng hai con số dùng **hai thước đo khác nhau** — `ClusteringEvaluator` của Spark
-mặc định dùng khoảng cách *squared* Euclidean, còn scikit-learn dùng Euclidean. Cùng cách
-chia cụm của K-means (k=2), silhouette kiểu Spark là 0.7127 còn kiểu Euclidean là 0.4909.
-Bảng trên đo lại cả 5 bằng cùng một thước đo; khoảng cách giữa K-means và nhóm còn lại nhỏ
-hơn nhiều so với kết luận "K-means vượt trội hẳn" trong bản cũ.
+**Nhưng các cụm có ý nghĩa thực tế, giải thích được** — kiểm tra bằng đặc trưng trung bình
+từng cụm (không chỉ tin con số silhouette):
 
-Hai ràng buộc khi chọn cấu hình tầng 3 (giải thích trong docstring `ext_clustering.py`):
-tỉ lệ nhiễu <= 20% (silhouette bỏ điểm nhiễu nên thuật toán vứt nhiều điểm sẽ được điểm cao
-giả tạo) và số cụm <= 6 (cùng ngân sách với dải k của tầng 1/2 — không giới hạn thì silhouette
-thưởng cho việc băm thành nhiều cụm siêu nhỏ; đã gặp HDBSCAN `min_cluster_size=2` cho 7 cụm,
-silhouette 0.87, thắng cách chia đúng 2 cụm).
+| Cụm | Số dòng (tỉ lệ) | PM2.5 TB | PM10 TB | O3 TB | NO2 TB | Đặc điểm |
+|---|---|---|---|---|---|---|
+| 0 | 1.711 (71.3%) | 23.2 | 29.3 | 47.3 | 7.1 | Nền chung: đa số VN (1.053 dòng), IN (418), lẫn các nước khác vào tháng sạch |
+| 1 | 449 (18.7%) | **91.8** | **122.4** | 66.8 | 25.4 | Ô nhiễm nặng: đỉnh điểm IN (182), VN (147), AE (60), CN (55) |
+| 2 | 240 (10.0%) | **7.9** | **10.1** | 55.4 | 15.5 | Sạch: DE, GB, CA, US (60 dòng mỗi nước) |
 
-**Nhận xét:** với chỉ **20 điểm** (5 thành phố × 4 tháng) và cấu trúc "1 điểm ngoại lai
-tách biệt + phần còn lại gộp cụm", chênh lệch giữa các thuật toán không đủ tin cậy để kết
-luận. Khi có data thật (200 trạm, nhiều năm, nhiều nhóm khí hậu), thứ hạng có thể đổi khác.
+Không cụm nào suy biến (không lệch 99%/0.5%/0.5%). Thành phố tiêu biểu cụm 1 (PM2.5 cao nhất
+theo trung bình các tháng): Nabagrām (163.7), Mumbai (149.3), Bairāgnia (143.8), New Delhi
+(142.1), Beijing (141.6). Thành phố tiêu biểu cụm 2 (PM2.5 thấp nhất): Calgary (3.5), Glasgow
+(3.6), Liverpool (4.3), Manchester (4.6), New York (4.6) — đúng khớp trực giác "đô thị châu
+Á/Trung Đông ô nhiễm nặng theo mùa" tách khỏi "các nước phát triển, nền ô nhiễm thấp".
 
-**Phát hiện kỹ thuật đáng chú ý** (đã sửa, ghi trong code): `StandardScaler(withMean=True)`
-làm `BisectingKMeans` của Spark MLlib suy biến về đúng 1 cụm bất kể k/seed — đã đổi sang
+**77/200 thành phố đổi cụm giữa các tháng** — đúng tín hiệu mùa vụ mà thiết kế nhắm tới (nhóm
+theo thành phố+tháng, không phải thành phố+năm-tháng): các đô thị như Bắc Kinh/Delhi rơi vào
+cụm 1 (ô nhiễm nặng) đúng mùa cao điểm, các tháng còn lại rơi về cụm 0.
+
+**Kết luận:** kết quả không "đạt chuẩn" theo nghĩa silhouette cao, nhưng **có ý nghĩa và giải
+thích được** — nên trình bày kèm bảng đặc trưng cụm ở trên, không chỉ trích một con số
+silhouette, để không gây hiểu lầm là phân cụm tách biệt hoàn hảo.
+
+**Đính chính so với bản đo trên `data/samples/`:** bản đó ghi K-means 0.7127 nhưng dùng thước đo
+squaredEuclidean của Spark `ClusteringEvaluator`, không so được với DBSCAN/HDBSCAN đo bằng
+Euclidean của sklearn (cùng cách chia cụm K-means k=2, đo lại theo Euclidean chỉ ra 0.4909).
+`compare_clustering_algorithms()` đã sửa để dùng chung một thước đo (Euclidean, bỏ điểm nhiễu)
+cho cả 5 thuật toán kể từ đó — bảng 0.3547 ở trên đã theo đúng cách đo mới.
+
+Hai ràng buộc khi chọn cấu hình tầng 3 (docstring `ext_clustering.py`): tỉ lệ nhiễu <= 20%
+(silhouette bỏ điểm nhiễu nên thuật toán vứt nhiều điểm sẽ được điểm cao giả tạo) và số cụm
+<= 6, cùng ngân sách với dải k tầng 1/2 (không giới hạn thì silhouette thưởng cho việc băm
+thành nhiều cụm siêu nhỏ — đã gặp HDBSCAN `min_cluster_size=2` cho 7 cụm, silhouette 0.87,
+thắng cách chia đúng 2 cụm trên dữ liệu mẫu).
+
+**Phát hiện kỹ thuật đã sửa** (còn nguyên giá trị): `StandardScaler(withMean=True)` làm
+`BisectingKMeans` của Spark MLlib suy biến về đúng 1 cụm bất kể k/seed — đã đổi sang
 `withMean=False` (không ảnh hưởng K-means/GMM vì 2 thuật toán này bất biến với phép dịch
 chuyển đều, chỉ có lợi cho BisectingKMeans).
 
-### 5.2. Dự báo AQI 24h — so sánh 3 tầng (SGD → Random Forest → CNN-LSTM)
-
-Tầng 3 (CNN-LSTM, TensorFlow/Keras ở driver) chạy cùng file với tầng 1+2; input là chuỗi 24h
-AQI liên tiếp (`build_sequence_windows`), khác lag rời rạc của tầng 1/2. Nhãn được chuẩn hoá
-khi train (bản Kaggle cũ không chuẩn hoá nên hội tụ chậm), nên số tầng 3 dưới đây **không**
-tái hiện số cũ (RMSE 31.69). Số chuỗi đưa vào bị giới hạn bằng `--cnn-max-rows`.
+### 5.2. Dự báo AQI 24h — Random Forest thắng nhẹ, chênh lệch không lớn
 
 | Model | RMSE | MAE | R² | n_test |
 |---|---|---|---|---|
-| SGDRegressor online (Tầng 1) | 32.05 | **20.56** | 0.5382 | 1.154 |
-| Random Forest (Tầng 2) | **31.87** | 20.64 | **0.5431** | 1.154 |
-| CNN-LSTM (Tầng 3) | 32.11 | 21.26 | 0.5359 | 1.157 |
+| SGDRegressor online (Tầng 1) | 20.29 | **9.99** | 0.7243 | 255.614 |
+| **Random Forest (Tầng 2)** | **20.10** | 10.65 | **0.7297** | 255.614 |
+| CNN-LSTM (Tầng 3) | 20.37 | 11.18 | 0.7251 | 119.767 |
 | *Đối chiếu*: LaSVM, paper Ghaemi 2015 | — | — | *~0.81* | *(data khác, không so trực tiếp)* |
 
-Train/test split theo thời gian (3 tháng đầu train, 1 tháng cuối test) — không random, tránh
-rò rỉ tương lai vào quá khứ.
+Train/test split theo thời gian (không random, tránh rò rỉ tương lai vào quá khứ). R² thật
+(0.72–0.73) tiến gần hơn nhiều tới baseline paper (0.81) so với lần đo trên sample (0.54) —
+đúng như dự đoán trước đó: dữ liệu thật nhiều năm giúp mô hình học tốt hơn nhiều.
 
-**Nhận xét:** ba tầng chênh nhau chưa đến 1% RMSE (31.87 – 32.11) trên 1.154 dòng test, nên
-với dữ liệu mẫu này **không thể kết luận tầng nào tốt hơn** — bản đo Kaggle trước đó cho
-CNN-LSTM nhỉnh hơn (31.69) nhưng chênh lệch cỡ này nằm trong nhiễu giữa các lần huấn luyện.
-CNN-LSTM train bằng `loss="mse"` nên bám RMSE hơn MAE. Sample 4 tháng/5 trạm quá nhỏ để độ
-phức tạp thêm của RF/CNN-LSTM phát huy; cần data thật (200 trạm × 3-5 năm) để thấy chênh lệch
-rõ hơn, và nên thêm baseline đơn giản "AQI cùng giờ hôm qua" để có lý do biện minh cho mô hình.
+**Random Forest thắng theo RMSE và R², nhưng KHÔNG thắng theo MAE** — SGD có MAE thấp nhất
+(9.99 so với 10.65 của RF). Không phải nghịch lý: hai chỉ số phạt sai số khác nhau (RMSE/R²
+phạt nặng sai số lớn hơn MAE); RF khá hơn ở việc giảm sai số lớn nhưng không nhất thiết khá
+hơn ở sai số trung bình. **Chọn RF làm tầng thắng vì RMSE và R² là hai tiêu chí chính**, nhưng
+nên nêu rõ đánh đổi MAE khi trình bày, không chỉ trích mỗi RMSE.
 
-**Feature importance (Random Forest):**
+**Hai điều cần nêu khi trích số này vào báo cáo:**
+- **Random Forest chạy với tham số bị giảm so với thiết kế gốc** (`num_trees=20, max_depth=5`
+  thay vì `100, 10`) — do giới hạn tài nguyên khi train trên driver với ~8,5 triệu dòng. Kết
+  luận "RF thắng" vẫn đứng, nhưng đây không phải cấu hình RF đầy đủ; RF với tham số gốc có
+  thể còn thắng cách biệt hơn.
+- **`n_test` của CNN-LSTM (119.767) nhỏ hơn nhiều** so với SGD/RF (255.614) do giới hạn
+  `--cnn-max-rows` (lấy mẫu tối đa 300.000 chuỗi) — ba tầng không đo trên đúng cùng một tập
+  test, nên so sánh RMSE/MAE/R² giữa CNN-LSTM và 2 tầng kia chỉ mang tính tham khảo.
+
+**Backtest** (`ext_forecast_backtest.json`, dùng cho panel Grafana "AQI Forecast +24h"): 5 trạm
+mặc định (CN_BJS_01, IN_DEL_01, JP_TYO_01, VN_HAN_01, VN_HCM_01), 2.898 dòng, khoảng
+2026-08-03 → 2026-09-01 (giờ được dự báo). 12/2.898 dòng thiếu SGD/RF (rìa dữ liệu — không đủ
+lag để tính), 0 dòng thiếu `actual`/CNN-LSTM.
+
+**Chưa làm được, nên bổ sung nếu còn thời gian:** thêm baseline đơn giản "AQI cùng giờ hôm
+qua" để có mốc so sánh cho RF/CNN-LSTM (đã nêu ở lần đo trước, vẫn chưa làm); lấy lại
+feature importance của Random Forest trên dữ liệu thật (bảng dưới đây vẫn là số đo trên
+`data/samples/`, **không phải số liệu chính thức**, giữ lại chỉ để tham khảo hướng feature
+nào quan trọng — cần in lại `print_feature_importances()` từ lần chạy thật và thay bảng này).
+
+**Feature importance (Random Forest, đo trên `data/samples/` — CHƯA phải số liệu chính thức):**
 
 | Hạng | Feature | Importance |
 |---|---|---|
@@ -174,13 +210,3 @@ rõ hơn, và nên thêm baseline đơn giản "AQI cùng giờ hôm qua" để 
 | 5 | `aqi_lag_24h` | 0.0706 |
 | 6 | `aqi_lag_3h` | 0.0513 |
 | — | so2, o3, hour_of_day, no2, co, month, lat | 0.012 – 0.036 |
-
-**Nhận xét:**
-- RF chỉ nhỉnh hơn SGD một chút trên sample nhỏ (4 tháng) — chênh lệch dự kiến rõ hơn khi
-  có dữ liệu thật nhiều năm, vì RF train phân tán trên toàn bộ dữ liệu cùng lúc còn SGD giới
-  hạn bởi cách học online từng tháng.
-- `lon` (kinh độ) quan trọng nhất — hợp lý vì kinh độ tương ứng trực tiếp với trạm/quốc gia
-  (Ấn Độ vs Việt Nam vs Nhật có nền ô nhiễm rất khác biệt), mô hình dùng nó để "nhận diện"
-  trạm nào đang dự báo.
-- R² thấp hơn baseline paper (0.81) — hợp lý vì sample chỉ có 4 tháng dữ liệu tổng hợp, ít
-  hơn nhiều so với dữ liệu thật nhiều năm trong paper gốc.
