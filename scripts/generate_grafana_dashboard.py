@@ -1,3 +1,13 @@
+"""
+Sinh file dashboard Grafana grafana/dashboards/aqi-overview.json bằng Python, để dễ chỉnh sửa hơn
+so với viết tay JSON dài.
+
+Các panel dùng Infinity datasource gọi FastAPI (http://serving-api:8000): danh sách trạm, bản đồ,
+AQI mới nhất, xếp hạng, chuỗi thời gian AQI và nồng độ các chất, phân cụm theo tháng và dự báo AQI
+sau 24 giờ.
+
+Chạy từ thư mục gốc repo: python scripts/generate_grafana_dashboard.py
+"""
 from __future__ import annotations
 
 import json

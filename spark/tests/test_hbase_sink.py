@@ -1,9 +1,8 @@
-"""
-Unit test cho sinks/hbase_sink.py — NGƯỜI B.
+"""Unit test cho sinks/hbase_sink.py.
 
-Chốt HỢP ĐỒNG với FastAPI (serving/app/main.py): sai một ký tự row key hay tên cột là API
-đọc ra rỗng mà không báo lỗi, nên các literal dưới đây lấy từ CONTRACTS.md C4 và main.py.
-"""
+Các test này chốt hợp đồng với FastAPI (serving/app/main.py): sai một ký tự trong row key hoặc
+tên cột thì API đọc ra rỗng mà không báo lỗi. Vì vậy các giá trị mẫu dưới đây lấy từ
+CONTRACTS.md (C4) và main.py."""
 import calendar
 from datetime import datetime, timezone
 

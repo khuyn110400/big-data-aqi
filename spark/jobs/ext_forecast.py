@@ -69,7 +69,7 @@ FEATURE_COLS = [
     "hour_of_day", "month", "lat", "lon",
 ]
 TARGET_COL = "target_aqi_24h"
-TEST_FRACTION = 0.2  # 20% khoang thoi gian cuoi lam test, theo dung nguyen tac time-series
+TEST_FRACTION = 0.2  # 20% khoảng thời gian cuối làm test, đúng nguyên tắc với chuỗi thời gian
 
 SEQUENCE_WINDOW_HOURS = 24
 SEQ_COLS = [f"seq_{i}" for i in range(SEQUENCE_WINDOW_HOURS)]
@@ -221,7 +221,7 @@ def build_sequence_windows(df, window_hours=SEQUENCE_WINDOW_HOURS):
     @F.udf(returnType=ArrayType(DoubleType()))
     def _seq_udf(cur_ts, pairs):
         aligned = align_hourly_window(cur_ts, ((r["ts_epoch"], r["v"]) for r in pairs), window_hours)
-        return list(reversed(aligned))  # align_hourly_window: idx0 = hien tai -> dao lai thanh oldest-first
+        return list(reversed(aligned))  # align_hourly_window trả idx 0 là giờ hiện tại, đảo lại thành thứ tự cũ đến mới
 
     df = df.withColumn("sequence", _seq_udf(F.col("ts_epoch"), packed))
 

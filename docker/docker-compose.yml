@@ -1,10 +1,9 @@
-# NGƯỜI A · M1
-# Phiên bản service theo Bảng 1 của "Thiết kế hệ thống v1".
+# Toàn bộ hệ thống chạy bằng Docker Compose: Kafka, HDFS, Spark, ZooKeeper, HBase, FastAPI, Grafana.
+# Phiên bản các service theo Bảng 1 của "Thiết kế hệ thống v1".
 #
 # Thứ tự dựng: kafka -> hdfs -> spark -> zookeeper -> hbase -> grafana
-# Dựng TỪNG service một và test xong mới thêm service tiếp theo (theo đúng Bảng 5 -
-# thứ tự cài đặt). Đừng viết cả file rồi up một lần — 6 lỗi cùng lúc không biết lỗi
-# nào gây ra lỗi nào.
+# Nên dựng từng service một và kiểm tra xong mới thêm service tiếp theo (theo Bảng 5, thứ tự cài
+# đặt). Nếu dựng cả file một lần thì nhiều lỗi xuất hiện cùng lúc và khó biết lỗi nào gây ra lỗi nào.
 #
 #   docker compose up -d kafka                 && docker exec -it kafka kafka-topics.sh --version
 #   docker compose up -d namenode datanode      && bash ../scripts/02_init_hdfs.sh
@@ -49,8 +48,8 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-      # Image mặc định ghi log vào /tmp/kraft-combined-logs (KHÔNG persist) — phải trỏ
-      # tường minh sang thư mục có mount volume, không thì mất hết topic khi container bị recreate.
+      # Mặc định image ghi log vào /tmp/kraft-combined-logs (không được lưu bền), nên phải trỏ
+      # sang thư mục có mount volume, nếu không sẽ mất hết topic khi container bị tạo lại.
       KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
       - kafka-data:/var/lib/kafka/data
@@ -148,7 +147,7 @@ services:
     environment:
       ZOO_MY_ID: 1
 
-  # HBase 1.2.6: image cũ nhưng ổn định, tested chung với bde2020 hadoop stack.
+  # HBase 1.2.6: image cũ nhưng ổn định, dùng chung được với bộ image Hadoop của bde2020.
   # Khi tạo bảng ở scripts/03_init_hbase.sh không dùng COMPRESSION => 'SNAPPY': Snappy cần thư viện
   # native mà image này thường không có, RegionServer sẽ không mở được bảng. Dùng GZ hoặc không nén.
   # Kiểm tra: mở http://localhost:16010 , hoặc docker exec -it hbase-master hbase shell <<< "status"

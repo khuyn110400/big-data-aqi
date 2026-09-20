@@ -1,10 +1,8 @@
-"""
-Test streaming_aqi.py — NGƯỜI B.
+"""Test streaming_aqi.py.
 
-Bài quan trọng nhất là test_streaming_cung_ket_qua_voi_pha2: cùng một chuỗi giờ đi qua Pha 2
-(batch, Spark) và qua streaming (từng giờ một, đọc lookback từ HBase giả) PHẢI ra cùng AQI.
-Nó chứng minh "một lõi dùng chung" hoạt động thật.
-"""
+Quan trọng nhất là test_streaming_cung_ket_qua_voi_pha2: cùng một chuỗi giờ đi qua Pha 2 (batch,
+Spark) và qua streaming (từng giờ một, đọc lookback từ HBase giả) phải cho cùng AQI. Test này cho
+thấy hai làn thật sự dùng chung một lõi tính toán."""
 import json
 
 import pytest

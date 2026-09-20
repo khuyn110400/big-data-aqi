@@ -1,9 +1,7 @@
-"""
-Unit test cho aqi_core — NGƯỜI B viết ở M1.
+"""Unit test cho aqi_core.
 
-Toàn bộ số kỳ vọng lấy trực tiếp từ QĐ 1459/QĐ-TCMT (mục 2.3 — Ví dụ tính mẫu).
-Đây là bằng chứng duy nhất chứng minh công thức AQI của đồ án đúng.
-"""
+Các giá trị kỳ vọng lấy trực tiếp từ QĐ 1459/QĐ-TCMT (mục 2.3, ví dụ tính mẫu). Đây là bằng
+chứng chính cho thấy công thức AQI của đồ án đúng."""
 import pytest
 from aqi_core.iaqi import align_hourly_window, iaqi, iaqi_day, iaqi_hour, level_of, nowcast
 
@@ -108,8 +106,8 @@ def test_align_hourly_window_dung_vi_tri():
     current_ts = 1_800_000_000
     pairs = [
         (current_ts, 10.0),                 # gio hien tai -> offset 0
-        (current_ts - 3600, 9.0),           # 1 gio truoc -> offset 1
-        (current_ts - 5 * 3600, 5.0),       # 5 gio truoc -> offset 5
+        (current_ts - 3600, 9.0),           # 1 giờ trước -> offset 1
+        (current_ts - 5 * 3600, 5.0),       # 5 giờ trước -> offset 5
     ]
     out = align_hourly_window(current_ts, pairs)
     assert out[0] == 10.0
@@ -121,14 +119,14 @@ def test_align_hourly_window_dung_vi_tri():
 
 def test_align_hourly_window_bo_qua_ngoai_cua_so():
     current_ts = 1_800_000_000
-    pairs = [(current_ts - 20 * 3600, 99.0)]  # 20 gio truoc -> ngoai window 12h
+    pairs = [(current_ts - 20 * 3600, 99.0)]  # 20 giờ trước -> ngoài cửa sổ 12 giờ
     out = align_hourly_window(current_ts, pairs)
     assert all(v is None for v in out)
 
 
 def test_align_hourly_window_ket_qua_giong_het_nowcast_truc_tiep():
-    # dam bao align_hourly_window() + nowcast() cho cung ket qua nhu goi nowcast()
-    # truc tiep voi mang da xep san -> chinh la dieu can "kiem chung" batch vs streaming
+    # align_hourly_window() cộng nowcast() phải cho cùng kết quả với gọi nowcast() trực tiếp trên
+    # mảng đã xếp sẵn: đây là điều cần kiểm chứng giữa batch và streaming
     current_ts = 1_800_000_000
     values_c1_to_c12 = [20.6, 19.6, 22.4, 20.3, 16.5, 19.0, 16.5, 19.5, 23.5, 20.5, 24.7, 26.9]
     pairs = [(current_ts - i * 3600, v) for i, v in enumerate(values_c1_to_c12)]

@@ -21,8 +21,8 @@ def spark():
         .master("local[2]")
         .config("spark.ui.enabled", "false")
         .config("spark.sql.shuffle.partitions", "2")
-        # BẮT BUỘC: to_date()/from_unixtime() quy đổi theo timezone của session (mặc định
-        # theo máy chạy, VD +07), không phải UTC -> dt/aqi_day sẽ lệch ngày nếu không set.
+        # Đặt múi giờ UTC: to_date() và from_unixtime() đổi theo múi giờ của session (mặc định
+        # là múi giờ máy chạy, ví dụ +07), nếu không đặt thì dt và aqi_day bị lệch ngày.
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
     )

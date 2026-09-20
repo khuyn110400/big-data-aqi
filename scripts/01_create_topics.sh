@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NGƯỜI A · M1 — tạo Kafka topic theo CONTRACTS.md §C6
+# Tạo các Kafka topic theo CONTRACTS.md §C6
 set -e
 KAFKA_BIN=/opt/kafka/bin
 docker exec kafka "$KAFKA_BIN/kafka-topics.sh" --create --if-not-exists \

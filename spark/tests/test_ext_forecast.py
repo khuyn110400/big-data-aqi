@@ -1,4 +1,4 @@
-"""Unit test cho ext_forecast.py (tầng 1 SGDRegressor, tầng 2 Random Forest, tầng 3 CNN-LSTM). NGƯỜI B · M4."""
+"""Unit test cho ext_forecast.py: tầng 1 (SGDRegressor), tầng 2 (Random Forest), tầng 3 (CNN-LSTM)."""
 import json
 from datetime import datetime, timedelta
 
@@ -34,19 +34,19 @@ def _make_station_series(station_id: str, n_hours: int, start=datetime(2026, 6, 
     rows = []
     for h in range(n_hours):
         ts = start + timedelta(hours=h)
-        aqi = 50 + (h % 24) * 2.0  # lap lai theo chu ky ngay -> lag_24h phai du bao tot
+        aqi = 50 + (h % 24) * 2.0  # lặp lại theo chu kỳ ngày nên lag_24h phải dự báo tốt
         rows.append((station_id, "TestCity", ts, 20.0, 30.0, 40.0, 10.0, 5.0, 300.0, aqi, 10.0, 100.0))
     return rows
 
 
 def test_build_forecast_features_loai_dong_thieu_lag_hoac_target(spark):
-    # can > 48h de co vung giao nhau: h>=24 (du lag_24h) VA h<=n-25 (du target) cung luc
+    # cần hơn 48 giờ để có vùng giao nhau: h >= 24 (đủ lag_24h) và h <= n-25 (đủ nhãn) cùng lúc
     n_hours = 72
     rows = _make_station_series("S1", n_hours=n_hours)
     df = spark.createDataFrame(rows, schema=AQI_SCHEMA)
     out = build_forecast_features(df)
 
-    assert out.count() == n_hours - 48  # dung 24 dau + 24 cuoi bi loai, giua giu lai
+    assert out.count() == n_hours - 48  # đúng 24 dòng đầu và 24 dòng cuối bị loại, phần giữa được giữ lại
     row = out.orderBy("chunk_month").first()
     assert row["aqi_lag_1h"] is not None
     assert row["target_aqi_24h"] is not None
@@ -58,13 +58,13 @@ def test_time_based_split_khong_random_lay_thang_cuoi_lam_test(spark):
     features = build_forecast_features(df)
 
     train_months, test_months = time_based_split(features, test_fraction=0.34)
-    assert max(train_months) < min(test_months)  # train luon truoc test ve thoi gian, khong xen ke
+    assert max(train_months) < min(test_months)  # train luôn nằm trước test về thời gian, không xen kẽ
 
 
 def test_train_sgd_online_hoc_duoc_chu_ky_ngay(spark):
-    # aqi lap lai dung chu ky 24h -> aqi_lag_24h gan nhu du doan hoan hao target
-    # (chinh no cung la aqi cua dung 24h truoc, ma chuoi lap lai chu ky 24h)
-    # can trai dai >= 2 thang lich de time_based_split co du train + test
+    # AQI lặp lại đúng chu kỳ 24 giờ nên aqi_lag_24h gần như dự đoán hoàn hảo nhãn (chính nó là
+    # AQI của đúng 24 giờ trước, mà chuỗi lặp lại theo chu kỳ 24 giờ).
+    # Cần trải dài ít nhất 2 tháng lịch để time_based_split có đủ train và test
     rows = _make_station_series("S1", n_hours=24 * 90)
     df = spark.createDataFrame(rows, schema=AQI_SCHEMA)
     features = build_forecast_features(df).cache()
@@ -73,17 +73,17 @@ def test_train_sgd_online_hoc_duoc_chu_ky_ngay(spark):
     model, scaler = train_sgd_online(features, train_months)
     metrics = evaluate(model, scaler, features, test_months)
 
-    # Muc dich test: xac nhan CO CHE hoat dong dung (feature/split/train/eval khong loi),
-    # KHONG phai kiem tra do hoi tu toi uu cua SGDRegressor (phu thuoc hyperparameter,
-    # ngoai pham vi unit test nay). R2 > 0 nghia la mo hinh hoc duoc tot hon baseline
-    # "luon doan trung binh" - du de xac nhan pipeline hoat dong dung.
+    # Mục đích: xác nhận cơ chế chạy đúng (feature, chia train/test, huấn luyện, đánh giá không
+    # lỗi), không kiểm tra độ hội tụ tối ưu của SGDRegressor (phụ thuộc siêu tham số, ngoài phạm
+    # vi unit test này). R2 > 0 nghĩa là mô hình học được tốt hơn baseline "luôn đoán trung bình",
+    # đủ để xác nhận pipeline hoạt động.
     assert metrics["r2"] > 0
     assert metrics["n_test"] > 0
 
 
 def test_train_random_forest_hoc_duoc_chu_ky_ngay(spark):
-    # tai dung chinh du lieu chu ky 24h da co (test tang 1) - property phai dung
-    # cho ca 2 tang: mo hinh phai hoc tot hon baseline "doan trung binh" (R2 > 0)
+    # Trên đúng dữ liệu chu kỳ 24 giờ đã dùng ở test tầng 1: tính chất này phải đúng cho cả hai
+    # tầng, mô hình phải học tốt hơn baseline "đoán trung bình" (R2 > 0)
     rows = _make_station_series("S1", n_hours=24 * 90)
     df = spark.createDataFrame(rows, schema=AQI_SCHEMA)
     features = build_forecast_features(df).cache()

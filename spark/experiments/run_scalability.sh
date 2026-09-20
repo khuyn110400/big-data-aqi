@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Chạy toàn bộ lưới thực nghiệm scalability (WORKPLAN.md §Thực nghiệm).
-# Mỗi combo 1 tiến trình Python riêng — xem lý do trong scalability_bench.py.
+# Chạy toàn bộ lưới thực nghiệm scalability (3 kích thước dữ liệu x 3 số executor).
+# Mỗi tổ hợp chạy trong một tiến trình Python riêng, lý do xem trong scalability_bench.py.
 set -euo pipefail
-cd "$(dirname "$0")/.."   # cd vao spark/
+cd "$(dirname "$0")/.."   # vào thư mục spark/
 source .venv/bin/activate
 
 CSV_OUT="../docs/experiments_data/scalability_results.csv"

@@ -1,3 +1,16 @@
+"""
+Mở rộng danh sách trạm collector/config/cities.json từ 8 lên 200 trạm: 100 Việt Nam, 50 Ấn Độ
+và 50 nước khác.
+
+Đọc danh sách thành phố của OpenWeather (data/reference/city.list.json.gz, tải từ
+http://bulk.openweathermap.org/sample/city.list.json.gz), giữ nguyên các trạm đã có rồi chọn thêm:
+  - Việt Nam và Ấn Độ: lấy mẫu farthest-point để các trạm trải đều về địa lý.
+  - Các nước khác: select_global() chọn thêm cho đủ 50 trạm.
+Kết quả được kiểm tra đủ 200 trạm, đúng số lượng từng nhóm và không trùng station_id, sau đó ghi
+đè lên cities.json.
+
+Chạy từ thư mục gốc repo: python scripts/generate_cities_200.py
+"""
 from __future__ import annotations
 
 import gzip

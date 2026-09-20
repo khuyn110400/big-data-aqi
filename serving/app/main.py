@@ -1,8 +1,7 @@
 """
-Query/API Bridge — FastAPI đọc HBase, trả JSON cho Grafana.
-NGƯỜI A · M3
+Query/API Bridge: FastAPI đọc HBase và trả JSON cho Grafana.
 
-Contract: CONTRACTS.md §C5.
+Contract: CONTRACTS.md §C5 (các endpoint /ext/* theo §C8).
 """
 
 from __future__ import annotations
@@ -70,7 +69,7 @@ cache_lock = RLock()
 
 
 def retry_hbase_transport(func):
-    """Retry once when HBase Thrift reuses a stale socket."""
+    """Thử lại một lần khi HBase Thrift dùng lại socket đã cũ (stale)."""
     @wraps(func)
     def wrapped(*args, **kwargs):
         for attempt in range(2):
@@ -231,8 +230,8 @@ def scan_station_range(
         ):
             rows.append(row_to_measurement(data))
 
-    # HBase reverse_ts trả newest -> oldest.
-    # API timeseries nên trả chronological ascending.
+    # Nhờ reverse_ts, HBase trả dữ liệu từ mới đến cũ.
+    # API timeseries trả theo thứ tự thời gian tăng dần.
     rows.sort(key=lambda x: x["ts_utc"] or "")
 
     return rows

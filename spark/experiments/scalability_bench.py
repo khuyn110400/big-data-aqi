@@ -1,28 +1,28 @@
 """
-Thực nghiệm scalability — bắt buộc cho đồ án big data (xem WORKPLAN.md §Thực nghiệm).
+Thực nghiệm scalability: đo thời gian chạy Pha 2 theo kích thước dữ liệu và số executor.
 
-Đo thời gian chạy Pha 2 (compute_iaqi_hour — phần tốn CPU nhất: UDF Nowcast + iaqi_hour
-trên từng dòng) với 3 kích thước dữ liệu x 3 số executor, dùng `local[N]` làm proxy cho
-số executor (không có cluster nhiều máy thật — N thread trên 1 máy, đã kiểm chứng máy
-có 8 core vật lý nên local[1]/[2]/[4] không bị oversubscribe).
+Đo Pha 2 (compute_iaqi_hour, phần tốn CPU nhất: UDF Nowcast và iaqi_hour trên từng dòng) với
+3 kích thước dữ liệu x 3 số executor. Dùng `local[N]` làm đại diện cho số executor (không có
+cluster nhiều máy thật: N luồng trên một máy). Máy đo có 8 core vật lý nên local[1], [2], [4]
+không bị quá tải.
 
-Dữ liệu sinh trực tiếp bằng Spark (spark.range + F.rand), KHÔNG ghi file JSON trung
-gian — mục đích là đo chi phí TÍNH TOÁN (UDF/window) của Pha 2, không lẫn với chi phí
-đọc file. Vì vậy con số ở đây không thay thế cho benchmark I/O thật trên HDFS.
+Dữ liệu được sinh trực tiếp bằng Spark (spark.range và F.rand), không ghi file JSON trung gian:
+mục đích là đo chi phí tính toán (UDF, window) của Pha 2, không lẫn với chi phí đọc file. Vì
+vậy các con số này không thay thế cho benchmark I/O thật trên HDFS.
 
-Mỗi combo (size, executor) chạy trong 1 TIẾN TRÌNH PYTHON RIÊNG — đã thử gộp nhiều
-SparkSession start/stop trong cùng 1 process (calibration run) và gặp lỗi ngẫu nhiên
-"EOF reached before Python server acknowledged" (PythonAccumulatorV2) khi tạo lại
-SparkContext liên tiếp. Không ảnh hưởng kết quả lần đó, nhưng không đáng tin cậy cho
-9 lần chạy dài (8M dòng) — nên bash loop gọi script 1 lần/combo (script tự append CSV).
+Mỗi tổ hợp (kích thước, số executor) chạy trong một tiến trình Python riêng. Đã thử gộp nhiều
+lần start/stop SparkSession trong cùng một tiến trình (lần chạy hiệu chỉnh) và thỉnh thoảng gặp
+lỗi "EOF reached before Python server acknowledged" (PythonAccumulatorV2) khi tạo lại
+SparkContext liên tiếp. Lỗi này không ảnh hưởng kết quả của lần đó nhưng không đáng tin cho 9 lần
+chạy dài (8M dòng), nên vòng lặp bash gọi script một lần cho mỗi tổ hợp (script tự append vào CSV).
 
 Chạy (xem experiments/run_scalability.sh):
   python experiments/scalability_bench.py --n 100000 --executors 1
   python experiments/scalability_bench.py --n 100000 --executors 2
   ... (9 lần, mỗi lần append 1 dòng vào CSV)
-  python experiments/scalability_bench.py --plot-only   # đọc CSV, in bảng + vẽ 2 biểu đồ
+  python experiments/scalability_bench.py --plot-only   # đọc CSV, in bảng và vẽ 2 biểu đồ
 
-Output: docs/experiments_data/scalability_results.csv + docs/images/scalability_*.png
+Đầu ra: docs/experiments_data/scalability_results.csv và docs/images/scalability_*.png
 """
 import argparse
 import csv
@@ -42,7 +42,7 @@ from pyspark.sql import functions as F
 
 from phase2_aqi import compute_iaqi_hour
 
-N_STATIONS = 200  # khớp quy mô backfill thật dự kiến trong WORKPLAN (200 điểm)
+N_STATIONS = 200  # khớp quy mô backfill thật (200 trạm)
 
 POLLUTANT_RANGES = {
     "pm2_5": (0, 150), "pm10": (0, 200), "o3": (0, 150),
@@ -134,7 +134,7 @@ def plot_charts(rows: list[dict], out_dir: str):
     execs = sorted({r["n_executors"] for r in rows})
     by_key = {(r["n_rows"], r["n_executors"]): r["seconds"] for r in rows}
 
-    # Bieu do 1: thoi gian chay theo kich thuoc, 1 duong/so executor
+    # Biểu đồ 1: thời gian chạy theo kích thước dữ liệu, mỗi số executor một đường
     fig, ax = plt.subplots(figsize=(7, 5))
     for e in execs:
         ys = [by_key[(s, e)] for s in sizes]

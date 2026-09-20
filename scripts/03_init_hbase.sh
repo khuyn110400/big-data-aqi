@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# NGƯỜI A · M3 — tạo bảng HBase theo CONTRACTS.md §C4
+# Tạo bảng HBase theo CONTRACTS.md §C4
 docker exec -i hbase-master hbase shell <<'HBASE'
-# LƯU Ý: không dùng COMPRESSION => 'SNAPPY'.
-# Snappy cần thư viện native; trên Apple Silicon (arm64) thường không có và
-# RegionServer sẽ không mở được bảng với lỗi khó hiểu. Cần nén thì dùng 'GZ' (thuần Java).
+# Không dùng COMPRESSION => 'SNAPPY': Snappy cần thư viện native mà image này thường không có,
+# RegionServer sẽ không mở được bảng và báo lỗi khó hiểu. Nếu cần nén thì dùng 'GZ' (thuần Java).
 create 'air_quality', {NAME => 'd', VERSIONS => 1}
 describe 'air_quality'
 status

@@ -105,7 +105,7 @@ def _pick_best_k(scaled_df, algo_cls, k_candidates=K_CANDIDATES, seed=42):
     scores = {}
     for k in k_candidates:
         if k >= scaled_df.count():
-            continue  # khong du diem du lieu cho k cum
+            continue  # không đủ điểm dữ liệu cho k cụm
         try:
             model = algo_cls(k=k, seed=seed, featuresCol="features", predictionCol="cluster").fit(scaled_df)
             result = model.transform(scaled_df)

@@ -1,4 +1,8 @@
 #!/bin/sh
+# Chạy Pha 1 bản chịu lỗi (spark/jobs/phase1_clean_resumable_v4.py) trong container spark-master,
+# lần lượt qua 3 giai đoạn grid, interpolate, final. Script gọi với --resume nên nếu bị ngắt thì
+# chạy lại sẽ tiếp tục từ giai đoạn đang dở. Đường dẫn /tmp/aqi là thư mục chứa mã Spark
+# trong container.
 set -eu
 
 export USER=root

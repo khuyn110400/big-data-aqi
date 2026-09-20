@@ -1,12 +1,12 @@
 """
-Sinh dữ liệu mẫu đúng schema C1, HIỆU CHỈNH THEO 90 NGÀY DỮ LIỆU THẬT.
+Sinh dữ liệu mẫu đúng schema C1, hiệu chỉnh theo 90 ngày dữ liệu thật.
 
-Căn cứ: 2041 bản ghi thật của OpenWeather cho TP.HCM, 2026-06-15 → 2026-09-13.
-Xem data/fixtures/owm_air_pollution_raw.json.
+Căn cứ: 2041 bản ghi thật của OpenWeather cho TP.HCM, từ 2026-06-15 đến 2026-09-13
+(xem data/fixtures/owm_air_pollution_raw.json).
 
-Vì sao dùng 90 ngày thay vì 7 ngày: cửa sổ 7 ngày rơi đúng mùa mưa, không khí sạch
-(pm2_5 max chỉ 10.1). Trên 90 ngày, pm2_5 max = 112.9 — rộng gấp 11 lần. Nếu hiệu chỉnh
-theo 7 ngày thì AQI lúc nào cũng "Tốt" và Pha 2/Pha 3 không có gì để phân tích.
+Vì sao dùng 90 ngày thay vì 7 ngày: cửa sổ 7 ngày rơi đúng mùa mưa, không khí sạch (pm2_5 lớn
+nhất chỉ 10.1). Trên 90 ngày, pm2_5 lớn nhất là 112.9, gấp hơn 11 lần. Nếu hiệu chỉnh theo 7 ngày
+thì AQI lúc nào cũng "Tốt" và Pha 2, Pha 3 không có gì để phân tích.
 
 Thông số lấy từ dữ liệu thật 90 ngày:
   pm2_5      : log-chuẩn, mean(log)=1.838  sd(log)=0.806  (TB 8.95, trung vị 6.20, max 112.9)
@@ -15,13 +15,12 @@ Thông số lấy từ dữ liệu thật 90 ngày:
   PM2.5 theo giờ VN : đỉnh 5h, đáy 12h, biên độ ±23%
   O3    theo giờ VN : đỉnh 14h, đáy 4h,  biên độ ±43%
 
-GAP CÓ QUY LUẬT — phát hiện quan trọng nhất:
-  4 khoảng đứt trong 90 ngày, TẤT CẢ đều là khối NGUYÊN NGÀY (24h hoặc 48h)
-  và TẤT CẢ đều bắt đầu lúc 01:00 UTC. Không có giờ lẻ nào bị thiếu.
-  → Không phải nhiễu ngẫu nhiên mà là ngày dữ liệu bị mất cả khối.
-  → Pha 1 KHÔNG được nội suy qua khoảng này (24h quá dài); phải đánh dấu ngày đó
-    không đủ dữ liệu và loại khỏi AQI ngày.
-  Tỉ lệ đầy đủ thật: 94.4% trên 90 ngày (7 ngày cho 85.8% vì rơi trúng 1 gap).
+Khoảng thiếu có quy luật (phát hiện quan trọng nhất):
+  4 khoảng đứt trong 90 ngày đều là khối nguyên ngày (24 hoặc 48 giờ) và đều bắt đầu lúc
+  01:00 UTC; không có giờ lẻ nào bị thiếu. Đây không phải nhiễu ngẫu nhiên mà là những ngày mất
+  cả khối dữ liệu. Vì vậy Pha 1 không được nội suy qua khoảng này (24 giờ là quá dài), mà phải
+  đánh dấu ngày đó không đủ dữ liệu và loại khỏi AQI ngày.
+  Tỉ lệ đầy đủ thật là 94.4% trên 90 ngày (85.8% nếu chỉ lấy 7 ngày, vì rơi trúng một khoảng đứt).
 
 Chạy: python data/samples/generate_sample.py
 """

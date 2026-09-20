@@ -1,10 +1,8 @@
-"""
-Unit test cho phase3_aggregate.py — NGƯỜI B.
+"""Unit test cho phase3_aggregate.py.
 
-Test compute_daily()/compute_ranking() trên DataFrame nhỏ dựng tay, đối chiếu với
-các quyết định thiết kế đã chốt: điểm xếp hạng = avg_aqi, rank 1 = ô nhiễm nhất,
-worst_pollutant = dominant_pollutant xuất hiện nhiều giờ nhất.
-"""
+Test compute_daily() và compute_ranking() trên DataFrame nhỏ dựng tay, đối chiếu với các quyết
+định thiết kế: điểm xếp hạng là avg_aqi, hạng 1 là ô nhiễm nhất, worst_pollutant là
+dominant_pollutant xuất hiện nhiều giờ nhất."""
 import pytest
 
 from phase3_aggregate import compute_daily, compute_ranking
@@ -57,7 +55,7 @@ def test_compute_daily_worst_pollutant_la_mode(spark):
 
 
 def test_compute_daily_thieu_du_lieu_van_giu_dong_null(spark):
-    # aqi=None cho ca ngay -> avg/max/min phai la None, KHONG bi loai khoi output
+    # aqi = None cả ngày thì avg, max, min phải là None và dòng không bị loại khỏi kết quả
     df = spark.createDataFrame([("Hanoi", "VN", "2026-06-15", None, None, None)], schema=AQI_SCHEMA)
     out = compute_daily(df).collect()[0]
     assert out["avg_aqi"] is None
@@ -91,4 +89,4 @@ def test_compute_ranking_doc_lap_theo_tung_ngay(spark):
     )
     ranking = {(r["city"], r["dt"]): r["rank"] for r in compute_ranking(daily).collect()}
     assert ranking[("A", "2026-06-15")] == 1  # ngay 15: A o nhiem hon
-    assert ranking[("B", "2026-06-16")] == 1  # ngay 16: B o nhiem hon -> rank tinh doc lap tung ngay
+    assert ranking[("B", "2026-06-16")] == 1  # ngày 16: B ô nhiễm hơn -> hạng được tính độc lập theo từng ngày

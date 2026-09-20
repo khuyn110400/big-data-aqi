@@ -1,3 +1,14 @@
+"""
+Chọn lại 50 trạm ngoài Việt Nam và Ấn Độ trong collector/config/cities.json: 10 quốc gia, mỗi
+quốc gia 5 thành phố lớn (danh sách TARGETS).
+
+Giữ nguyên các trạm Việt Nam và Ấn Độ đang có, tra toạ độ từng thành phố trong
+data/reference/city.list.json.gz (danh sách của OpenWeather). Beijing và Tokyo lấy lại từ bản 8
+trạm ban đầu để giữ nguyên station_id. Script dừng và báo lỗi nếu không tìm thấy thành phố nào, và
+kiểm tra kết quả đủ 200 trạm, không trùng station_id hay toạ độ.
+
+Chạy từ thư mục gốc repo: python scripts/curate_global_50.py
+"""
 from __future__ import annotations
 
 import gzip

@@ -1,9 +1,7 @@
-"""
-Test load_history_to_hbase.py — NGƯỜI B.
+"""Test load_history_to_hbase.py.
 
-select_history() chạy trên parquet dựng theo đúng layout Pha 2 (partitionBy country, dt);
-write_partition() chạy với bảng HBase giả.
-"""
+select_history() chạy trên parquet dựng đúng layout của Pha 2 (partitionBy country, dt);
+write_partition() chạy với bảng HBase giả."""
 from pyspark.sql import Row
 from pyspark.sql import functions as F
 

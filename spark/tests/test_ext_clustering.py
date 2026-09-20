@@ -1,4 +1,4 @@
-"""Unit test cho ext_clustering.py (tầng 1 K-means, tầng 2 GMM/Bisecting, tầng 3 DBSCAN/HDBSCAN). NGƯỜI B · M4."""
+"""Unit test cho ext_clustering.py: tầng 1 (K-means), tầng 2 (GMM, Bisecting K-means), tầng 3 (DBSCAN, HDBSCAN)."""
 import json
 from datetime import datetime
 
@@ -31,18 +31,18 @@ def test_build_city_month_features_gom_dung_theo_thang(spark):
         schema=AQI_SCHEMA,
     )
     out = {r["month"]: r for r in build_city_month_features(df).collect()}
-    assert out[6]["avg_pm2_5"] == pytest.approx(15.0)  # trung binh (10+20)/2 cua thang 6
-    assert out[7]["avg_pm2_5"] == pytest.approx(100.0)  # thang 7 tach rieng, khong lan voi thang 6
+    assert out[6]["avg_pm2_5"] == pytest.approx(15.0)  # trung bình (10+20)/2 của tháng 6
+    assert out[7]["avg_pm2_5"] == pytest.approx(100.0)  # tháng 7 tách riêng, không lẫn với tháng 6
     assert out[6]["n_hours"] == 2
 
 
 def _make_clear_cluster_df(spark):
-    # 1 thanh pho o nhiem nang (gap 10x) phai bi tach cum khac voi nhung thanh pho con lai.
-    # Dung 6 thang + nhieu diem/thang de GMM uoc luong covariance on dinh. QUAN TRONG:
-    # 4 cot chat o nhiem phai BIEN THIEN DOC LAP (khong phai boi so tuyen tinh cua 1 bien
-    # duy nhat) -- da tung thu voi pm10=pm2_5*1.3, o3=pm2_5*2,... va phat hien BisectingKMeans
-    # khong tach duoc vi sau StandardScaler 4 cot do TRUNG HET NHAU (khong gian suy bien,
-    # thieu thuc te). Du lieu that khong bao gio co 4 chat tuong quan tuyen tinh hoan hao.
+    # Một thành phố ô nhiễm nặng (gấp 10 lần) phải bị tách sang cụm khác với các thành phố còn
+    # lại. Dùng 6 tháng và nhiều điểm mỗi tháng để GMM ước lượng covariance ổn định. Lưu ý: 4 cột
+    # chất ô nhiễm phải biến thiên độc lập (không phải bội số tuyến tính của một biến duy nhất).
+    # Đã từng thử pm10 = pm2_5*1.3, o3 = pm2_5*2, ... và thấy BisectingKMeans không tách được, vì
+    # sau StandardScaler 4 cột đó trùng hệt nhau (không gian suy biến, không thực tế). Dữ liệu
+    # thật không bao giờ có 4 chất tương quan tuyến tính hoàn hảo.
     rows = []
     for city, base in [("Clean_A", 10.0), ("Clean_B", 12.0), ("Clean_C", 11.0), ("Dirty", 150.0)]:
         for month in range(1, 7):
@@ -61,7 +61,7 @@ def _make_clear_cluster_df(spark):
 
 @pytest.mark.parametrize("fit_fn", [fit_kmeans, fit_gmm, fit_bisecting_kmeans])
 def test_fit_tach_dung_thanh_pho_o_nhiem_khac_biet(spark, fit_fn):
-    # property nay phai dung bat ke thuat toan (tang 1 K-means hay tang 2 GMM/Bisecting)
+    # tính chất này phải đúng với mọi thuật toán (tầng 1 K-means hay tầng 2 GMM, Bisecting)
     df = _make_clear_cluster_df(spark)
 
     result, model, k, silhouette = fit_fn(df, k=2)
