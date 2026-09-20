@@ -184,3 +184,38 @@ rõ hơn, và nên thêm baseline đơn giản "AQI cùng giờ hôm qua" để 
   trạm nào đang dự báo.
 - R² thấp hơn baseline paper (0.81) — hợp lý vì sample chỉ có 4 tháng dữ liệu tổng hợp, ít
   hơn nhiều so với dữ liệu thật nhiều năm trong paper gốc.
+
+## 6. Scalability Phase 2 — kết quả final 20/09/2026
+
+Benchmark chính thức chạy logic Pha 2 AQI trên Spark Standalone với 4 worker tạm,
+mỗi worker 1 core; `spark.cores.max` lần lượt giới hạn ứng dụng ở 1, 2 và 4 executor.
+Mỗi cấu hình được chạy trong một tiến trình Spark riêng. Workload benchmark dùng dữ
+liệu tổng hợp có cùng đường tính `compute_iaqi_hour()` / `aqi_core`, ở ba kích thước
+100K, 1M và 8M dòng.
+
+| Số dòng | 1 executor | 2 executors | 4 executors |
+|---:|---:|---:|---:|
+| 100.000 | 16,387 s | 11,839 s | 15,970 s |
+| 1.000.000 | 99,003 s | 51,241 s | 48,428 s |
+| 8.000.000 | 749,305 s | 385,217 s | 308,791 s |
+
+Speedup được tính theo `T1 / TN`:
+
+| Số dòng | 2 executors | 4 executors |
+|---:|---:|---:|
+| 100.000 | 1,384× | 1,026× |
+| 1.000.000 | 1,932× | 2,044× |
+| 8.000.000 | 1,945× | 2,427× |
+
+**Nhận xét:** với 100K dòng, overhead khởi tạo/scheduling khiến 4 executor không
+nhanh hơn 2 executor. Khi dữ liệu tăng lên 1M và 8M dòng, lợi ích song song rõ hơn.
+Ở 8M dòng, thời gian giảm từ 749,305 giây với 1 executor xuống 308,791 giây với
+4 executors, tương ứng speedup 2,427×. Speedup không tuyến tính do overhead Spark,
+Python UDF, serialization và chi phí điều phối/trao đổi dữ liệu. Toàn bộ 9 cấu hình
+đều được xác nhận số executor thực tế đúng bằng số executor yêu cầu.
+
+Evidence:
+- `final_results/scalability/scalability_results.csv`
+- `final_results/scalability/scalability_speedup.csv`
+- `final_results/scalability/executor_verification.txt`
+- `final_results/scalability/summary.md`

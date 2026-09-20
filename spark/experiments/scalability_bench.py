@@ -2,8 +2,8 @@
 Thực nghiệm scalability — bắt buộc cho đồ án big data (xem WORKPLAN.md §Thực nghiệm).
 
 Đo thời gian chạy Pha 2 (compute_iaqi_hour — phần tốn CPU nhất: UDF Nowcast + iaqi_hour
-trên từng dòng) với 3 kích thước dữ liệu x 3 số executor, dùng `local[N]` làm proxy cho
-số executor (không có cluster nhiều máy thật — N thread trên 1 máy, đã kiểm chứng máy
+trên từng dòng) với 3 kích thước dữ liệu x 3 số executor. Chế độ local[N] chỉ dùng cho
+dev; benchmark chính thức chạy Spark Standalone với worker/executor thật, 1 core/executor
 có 8 core vật lý nên local[1]/[2]/[4] không bị oversubscribe).
 
 Dữ liệu sinh trực tiếp bằng Spark (spark.range + F.rand), KHÔNG ghi file JSON trung
@@ -71,7 +71,7 @@ def make_synthetic_df(spark, n_rows: int, n_stations: int = N_STATIONS):
 def run_once(n_rows: int, n_executors: int) -> float:
     spark = (
         SparkSession.builder.appName(f"bench_{n_rows}_{n_executors}ex")
-        .master(f"local[{n_executors}]")
+        .master(os.environ.get("SCALABILITY_SPARK_MASTER", f"local[{n_executors}]"))
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.shuffle.partitions", str(max(4, n_executors * 4)))
         .config("spark.ui.enabled", "false")
