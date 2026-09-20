@@ -1,6 +1,6 @@
 """
-Gọi OpenWeather Air Pollution API theo chu kỳ -> Kafka air-quality-raw.
-NGƯỜI A · M3.
+Gọi OpenWeather Air Pollution API theo chu kỳ và đẩy bản ghi vào Kafka topic air-quality-raw.
+Bản ghi lỗi schema được đẩy sang topic air-quality-dlq.
 """
 
 import argparse

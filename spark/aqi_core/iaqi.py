@@ -1,24 +1,22 @@
 """
-aqi_core.iaqi — LÕI TÍNH AQI DÙNG CHUNG cho cả làn batch (Pha 2) và làn streaming.
+Lõi tính AQI, dùng chung cho Pha 2 (batch) và streaming.
 
-QUY TẮC VÀNG: không copy hàm ở đây sang chỗ khác. Streaming job và batch job
-phải import cùng module này, nếu không hai làn sẽ cho ra số khác nhau và
-không ai biết số nào đúng.
+Hai làn cùng import module này để cho ra cùng một kết quả trên cùng dữ liệu, vì vậy
+không copy các hàm ở đây sang nơi khác.
 
-Công thức nội suy tuyến tính (Công thức 1/2, QĐ 1459 mục 2.2.1b/2.2.2b):
+Nội suy tuyến tính (QĐ 1459, mục 2.2.1b và 2.2.2b):
 
         I_high - I_low
  IAQI = --------------- * (C - BP_low) + I_low
         BP_high - BP_low
 
- AQI  = max(IAQI của tất cả các chất có dữ liệu)     <- đây là "Reducer" của Pha 2
+AQI = max(IAQI của các chất có dữ liệu).
 
-`iaqi_hour()`/`iaqi_day()` chỉ hỗ trợ standard="VN_1459": VN_AQI phân biệt
-AQI giờ (Nowcast cho PM, TB1h cho khí, O3 dùng breakpoint 1h) và AQI ngày
-(TB24h cho PM, max TB1h ngày cho khí, O3 dùng max(1h ngày, 8h ngày) trừ khi
-TB8h ngày > 400 thì bỏ nhánh 8h) — 2 khái niệm này không tồn tại ở US_EPA.
-
-Người phụ trách: NGƯỜI B
+iaqi_hour() và iaqi_day() chỉ hỗ trợ VN_1459. Theo QĐ 1459, AQI giờ dùng Nowcast cho
+bụi PM, trung bình 1 giờ cho các khí và breakpoint 1 giờ cho O3. AQI ngày dùng trung bình
+24 giờ cho PM, trị số lớn nhất của trung bình 1 giờ trong ngày cho các khí, còn O3 lấy
+max(1 giờ, 8 giờ) và bỏ nhánh 8 giờ khi trung bình 8 giờ lớn nhất vượt 400. US_EPA không
+có hai khái niệm này.
 """
 from __future__ import annotations
 
@@ -42,8 +40,8 @@ def load_standard(standard: str = "VN_1459") -> dict:
 
 
 def max_plausible(standard: str = "VN_1459") -> dict:
-    """Trần loại ngoại lai mỗi chất = mốc nồng độ ứng với I=500 trong breakpoint.
-    Dùng chung cho Pha 1 (batch) và streaming để hai làn cắt ngoại lai giống nhau."""
+    """Nồng độ tối đa hợp lý của từng chất: mốc ứng với I=500 trong bảng breakpoint.
+    Pha 1 và streaming cùng dùng để loại giá trị ngoại lai."""
     std = load_standard(standard)["pollutants"]
     return {
         "pm2_5": std["pm2_5"]["bp"][-1],
@@ -57,10 +55,10 @@ def max_plausible(standard: str = "VN_1459") -> dict:
 
 def iaqi(concentration: Optional[float], pollutant: str, standard: str = "VN_1459") -> Optional[float]:
     """
-    Tính sub-index cho MỘT chất. Trả None nếu thiếu dữ liệu.
+    Tính chỉ số con (IAQI) của một chất. Trả None nếu thiếu dữ liệu.
 
-    Nồng độ âm -> None (Pha 1 lẽ ra đã lọc, đây là lớp bảo vệ thứ 2).
-    Nồng độ vượt mốc cao nhất -> kẹp về giá trị AQI lớn nhất (500).
+    Nồng độ âm bị coi là không hợp lệ (Pha 1 đã lọc, đây là lớp kiểm tra thứ hai).
+    Nồng độ vượt mốc cao nhất được kẹp về giá trị AQI lớn nhất (500).
     """
     if concentration is None or concentration < 0:
         return None
@@ -79,7 +77,7 @@ def iaqi(concentration: Optional[float], pollutant: str, standard: str = "VN_145
 
 
 def level_of(aqi_value: float, standard: str = "VN_1459") -> dict:
-    """AQI -> {'level': 1..6, 'label': 'Tốt'...} — tra theo bảng hiển thị (Bảng 1)."""
+    """Đổi AQI thành {'level': 1..6, 'label': 'Tốt'...} theo bảng mức hiển thị (Bảng 1)."""
     for lv in load_standard(standard)["level_labels"]:
         if aqi_value <= lv["i_high"]:
             return {"level": lv["level"], "label": lv["label"]}
@@ -88,10 +86,10 @@ def level_of(aqi_value: float, standard: str = "VN_1459") -> dict:
 
 def nowcast(hourly_values: list[Optional[float]]) -> Optional[float]:
     """
-    Giá trị Nowcast cho PM2.5/PM10 (QĐ 1459 mục 2.2.1a).
+    Giá trị Nowcast cho PM2.5 và PM10 (QĐ 1459, mục 2.2.1a).
 
-    hourly_values[0] = giờ hiện tại (c1) ... hourly_values[-1] = xa nhất (tối đa c12).
-    Trả None nếu không đủ 2/3 giá trị đầu (c1,c2,c3) có dữ liệu.
+    hourly_values[0] là giờ hiện tại (c1), phần tử cuối là giờ xa nhất (tối đa c12).
+    Trả None nếu trong 3 giá trị đầu (c1, c2, c3) có ít hơn 2 giá trị.
     """
     if sum(v is not None for v in hourly_values[:3]) < 2:
         return None
@@ -112,15 +110,13 @@ def align_hourly_window(
     window_hours: int = 12,
 ) -> list[Optional[float]]:
     """
-    Ghép các cặp (ts_epoch, value) rời rạc vào đúng vị trí giờ so với `current_ts`,
-    ra mảng đúng định dạng input của nowcast(). DÙNG CHUNG cho batch (Pha 2, lấy
-    (ts_epoch, value) từ Spark window) và streaming (lấy từ HBase lookback) — đây
-    là chỗ duy nhất quy đổi timestamp -> vị trí giờ, không viết lại ở 2 nơi.
+    Xếp các cặp (ts_epoch, value) rời rạc vào đúng vị trí giờ so với current_ts, ra mảng
+    đúng định dạng đầu vào của nowcast(). Pha 2 (lấy cặp từ Spark window) và streaming
+    (lấy từ HBase) cùng dùng hàm này để đổi timestamp thành vị trí giờ.
 
-    hourly[0] = current_ts, hourly[i] = giá trị cách current_ts đúng i giờ.
-    Cặp (ts_epoch, value) phải TỰ bao gồm current_ts nếu muốn hourly[0] có giá trị
-    (offset=0) — hàm này không tự thêm bản ghi hiện tại.
-    Cặp nào rơi ngoài [0, window_hours) hoặc value=None bị bỏ qua.
+    hourly[0] ứng với current_ts, hourly[i] ứng với giờ cách current_ts đúng i giờ. Hàm
+    không tự thêm bản ghi hiện tại: muốn hourly[0] có giá trị thì các cặp truyền vào phải
+    chứa current_ts. Cặp nằm ngoài [0, window_hours) hoặc có value None bị bỏ qua.
     """
     hourly: list[Optional[float]] = [None] * window_hours
     for ts_epoch, value in ts_value_pairs:
@@ -133,7 +129,7 @@ def align_hourly_window(
 
 
 def _reduce(subs: dict, standard: str) -> dict:
-    """Reducer dùng chung cho iaqi_hour/iaqi_day: AQI = max(IAQI có dữ liệu)."""
+    """Gộp các chỉ số con thành AQI = max(IAQI có dữ liệu). iaqi_hour và iaqi_day dùng chung."""
     valid = {p: v for p, v in subs.items() if v is not None}
     if not valid:
         return {"aqi": None, "aqi_level": None, "aqi_label": None,
@@ -149,11 +145,11 @@ def _reduce(subs: dict, standard: str) -> dict:
 
 def iaqi_hour(components: dict, standard: str = "VN_1459") -> dict:
     """
-    AQI giờ (Công thức 1/2, QĐ 1459 mục 2.2.1). CHỈ hỗ trợ VN_1459.
+    AQI giờ (QĐ 1459, mục 2.2.1). Chỉ hỗ trợ VN_1459.
 
-    components: pm2_5/pm10 ĐÃ LÀ Nowcast (gọi nowcast() trước — việc tính cửa sổ
-    12 giờ theo từng trạm thuộc về Pha 1/streaming, không phải hàm này);
-    so2/no2/co/o3 là giá trị TB1h hiện tại.
+    pm2_5 và pm10 trong components phải là giá trị Nowcast (gọi nowcast() trước; việc dựng
+    cửa sổ 12 giờ của từng trạm do Pha 2 hoặc streaming làm). so2, no2, co, o3 là trung
+    bình 1 giờ hiện tại.
     """
     if standard != "VN_1459":
         raise NotImplementedError("iaqi_hour() chỉ hỗ trợ VN_1459 (Nowcast là khái niệm riêng của VN_AQI)")
@@ -164,8 +160,8 @@ def iaqi_hour(components: dict, standard: str = "VN_1459") -> dict:
 
 
 def _iaqi_o3_day(o3_1h_max: Optional[float], o3_8h_max: Optional[float], standard: str) -> Optional[float]:
-    """O3 ngày = max(AQI theo TB1h ngày, AQI theo TB8h ngày) — TRỪ KHI TB8h ngày > 400
-    thì bỏ nhánh 8h, chỉ dùng O3(1h) (QĐ 1459 mục 2.2.2b, ghi chú)."""
+    """O3 ngày = max(AQI theo trung bình 1 giờ, AQI theo trung bình 8 giờ). Khi trung bình
+    8 giờ lớn nhất vượt 400 thì chỉ dùng nhánh 1 giờ (QĐ 1459, mục 2.2.2b, phần ghi chú)."""
     v_1h = iaqi(o3_1h_max, "o3_1h", standard)
     if o3_8h_max is not None and o3_8h_max <= 400:
         v_8h = iaqi(o3_8h_max, "o3_8h", standard)
@@ -176,10 +172,11 @@ def _iaqi_o3_day(o3_1h_max: Optional[float], o3_8h_max: Optional[float], standar
 
 def iaqi_day(components: dict, standard: str = "VN_1459") -> dict:
     """
-    AQI ngày (Công thức 1, QĐ 1459 mục 2.2.2). CHỈ hỗ trợ VN_1459.
+    AQI ngày (QĐ 1459, mục 2.2.2). Chỉ hỗ trợ VN_1459.
 
-    components: pm2_5/pm10 là TB24h; so2/no2/co là max TB1h trong ngày;
-    o3_1h_max/o3_8h_max là max TB1h / max TB8h trong ngày.
+    pm2_5 và pm10 là trung bình 24 giờ; so2, no2, co là trị số lớn nhất của trung bình
+    1 giờ trong ngày; o3_1h_max và o3_8h_max là trị số lớn nhất của trung bình 1 giờ và
+    8 giờ trong ngày.
     """
     if standard != "VN_1459":
         raise NotImplementedError("iaqi_day() chỉ hỗ trợ VN_1459")

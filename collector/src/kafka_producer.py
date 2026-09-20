@@ -1,4 +1,4 @@
-"""Kafka producer cho collector. NGƯỜI A · M3."""
+"""Kafka producer của collector: gửi bản ghi vào air-quality-raw và bản ghi lỗi vào air-quality-dlq."""
 
 import json
 import logging

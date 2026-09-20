@@ -1,21 +1,15 @@
 """
-Chuẩn hoá response OpenWeather -> message schema C1 trong CONTRACTS.md. NGƯỜI A · M1
+Chuẩn hoá response của OpenWeather thành bản ghi theo schema C1 (CONTRACTS.md).
 
-Đây là hàm QUAN TRỌNG NHẤT của Người A: mọi thứ downstream phụ thuộc vào nó
-đúng schema. Sai một tên trường là Spark job của Người B chết.
+Các job Spark phía sau đọc thẳng theo schema này nên tên trường phải khớp tuyệt đối.
+Bản ghi thiếu trường bắt buộc làm normalize() raise NormalizeError; nơi gọi chịu trách
+nhiệm bắt lỗi và đẩy bản ghi sang topic air-quality-dlq. station_id không được sinh ở
+đây mà lấy nguyên từ dict station (collector/config/cities.json).
 
-Response OpenWeather có dạng:
+Response của OpenWeather có dạng:
   {"coord": {...}, "list": [{"main": {"aqi": 2},
                              "components": {"co":..., "pm2_5":..., ...},
                              "dt": 1789023600}]}
-
-TODO(A):
-  [x] map sang đúng 100% schema C1 (đọc lại CONTRACTS.md, đừng nhớ theo trí nhớ)
-  [x] ts_utc phải tròn giờ và có hậu tố Z
-  [x] validate: thiếu trường bắt buộc -> đẩy sang topic air-quality-dlq, KHÔNG im lặng bỏ
-      (normalize() raise NormalizeError; caller là người bắt lỗi và đẩy DLQ)
-  [x] station_id sinh từ config/cities.json, ổn định giữa các lần chạy
-      (station_id không sinh ở đây - lấy nguyên từ station dict do caller truyền vào)
 """
 from datetime import datetime, timezone
 
@@ -26,7 +20,7 @@ _VALID_INGEST_MODES = ("history", "live")
 
 
 class NormalizeError(Exception):
-    """Bản ghi thiếu trường bắt buộc hoặc sai định dạng -> caller đẩy sang DLQ."""
+    """Bản ghi thiếu trường bắt buộc hoặc sai định dạng -> nơi gọi đẩy sang DLQ."""
 
 
 def normalize(owm_item: dict, station: dict, ingest_mode: str) -> dict:
@@ -44,14 +38,16 @@ def normalize(owm_item: dict, station: dict, ingest_mode: str) -> dict:
         station_id = station["station_id"]
         city = station["city"]
         country = station["country"]
-        # R2: lat/lon LUÔN lấy từ cities.json, KHÔNG bao giờ lấy từ coord của response
+        # lat/lon luôn lấy từ cities.json, không lấy từ coord trong response
+        # (API trả toạ độ lệch nhẹ so với toạ độ đã gửi đi)
         lat = round(float(station["lat"]), 4)
         lon = round(float(station["lon"]), 4)
     except (KeyError, TypeError) as exc:
         raise NormalizeError(f"station thiếu trường bắt buộc: {exc}") from exc
 
-    # R1: history đã tròn giờ, current thì không -> luôn làm tròn XUỐNG giờ
-    # để live và history của cùng một giờ sinh ra cùng ts_epoch (khớp key, dedup đúng).
+    # Endpoint history trả dt đã tròn giờ, endpoint hiện tại thì không. Luôn làm tròn xuống
+    # giờ để live và history của cùng một giờ có cùng ts_epoch, nhờ đó dedup và row key
+    # HBase khớp nhau.
     ts_epoch = dt_raw - (dt_raw % 3600)
     ts_utc = datetime.fromtimestamp(ts_epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

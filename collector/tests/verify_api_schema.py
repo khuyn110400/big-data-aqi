@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 """
-KIỂM CHỨNG GIẢ ĐỊNH SCHEMA BẰNG DỮ LIỆU THẬT — NGƯỜI A chạy ở M0, ngay khi có API key.
+Kiểm tra các giả định về schema của OpenWeather bằng response thật.
 
-Vì sao có file này:
-  Toàn bộ schema C1, file fixtures/ và data/samples/ hiện đang dựa trên TÀI LIỆU
-  của OpenWeather, KHÔNG phải trên một response thật đã gọi được. Chừng nào chưa
-  chạy file này thì mọi giả định bên dưới vẫn chỉ là giả định.
-
-Script làm 3 việc:
-  1. Gọi API thật (current + history), in ra response nguyên bản
-  2. Đối chiếu từng giả định -> báo PASS / FAIL cụ thể
+Schema C1, thư mục fixtures/ và data/samples/ ban đầu được dựng từ tài liệu của
+OpenWeather, chưa đối chiếu với response thật. Script này gọi API thật rồi:
+  1. Gọi endpoint hiện tại và endpoint lịch sử, in response nguyên bản
+  2. Đối chiếu từng giả định, báo PASS hoặc FAIL cụ thể
   3. Ghi response thật vào data/fixtures/ để thay file dựng sẵn
 
 Chạy:
@@ -22,15 +18,15 @@ KEY = os.environ.get("OWM_API_KEY")
 LAT, LON = 10.8231, 106.6297          # TP.HCM
 BASE = "https://api.openweathermap.org/data/2.5/air_pollution"
 
-# ---- CÁC GIẢ ĐỊNH ĐANG DÙNG TRONG REPO (cần kiểm chứng) --------------------
+# ---- Các giả định đang dùng trong repo, cần kiểm chứng ---------------------
 ASSUMED_TOP_KEYS   = {"coord", "list"}
 ASSUMED_ITEM_KEYS  = {"main", "components", "dt"}
 ASSUMED_COMPONENTS = {"co", "no", "no2", "o3", "so2", "pm2_5", "pm10", "nh3"}
 ASSUMED_AQI_RANGE  = (1, 5)
 ASSUMED_COORD_IS_OBJECT = True        # {lon, lat}, không phải mảng
-ASSUMED_DT_CURRENT_ALIGNED  = False   # ĐÃ KIỂM CHỨNG 13/09/2026: current KHÔNG tròn giờ
-ASSUMED_DT_HISTORY_ALIGNED  = True    # ĐÃ KIỂM CHỨNG: history tròn giờ 145/145
-ASSUMED_HISTORY_COMPLETENESS = 0.85   # ĐÃ KIỂM CHỨNG: 7 ngày thật chỉ đạt 85.8%
+ASSUMED_DT_CURRENT_ALIGNED  = False   # đã kiểm chứng 13/09/2026: endpoint hiện tại không tròn giờ
+ASSUMED_DT_HISTORY_ALIGNED  = True    # đã kiểm chứng: endpoint history tròn giờ (145/145 bản ghi)
+ASSUMED_HISTORY_COMPLETENESS = 0.85   # đã kiểm chứng: 7 ngày thật chỉ đạt 85,8%
 ASSUMED_HISTORY_FROM    = "2020-11-27"
 
 ok, fail = [], []

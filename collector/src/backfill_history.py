@@ -1,12 +1,11 @@
-"""Backfill dữ liệu lịch sử OpenWeather -> HDFS raw. NGƯỜI A · M2.
+"""Backfill dữ liệu lịch sử OpenWeather vào HDFS (thư mục raw).
 
-Bản tối ưu upload:
-- Giữ chunk API 90 ngày.
-- Normalize đúng schema C1.
-- Ghi .jsonl.gz theo:
+- Chia khoảng thời gian thành các cửa sổ 90 ngày, mỗi cửa sổ một call cho mỗi trạm.
+- Chuẩn hoá từng bản ghi theo schema C1.
+- Ghi file .jsonl.gz theo layout:
   /air-quality/raw/ingest_mode=history/country=XX/dt=YYYY-MM-DD/part-*.jsonl.gz
-- Checkpoint theo cửa sổ; --resume bỏ qua cửa sổ đã hoàn tất.
-- Batch mkdir HDFS và upload song song để giảm thời gian small-file I/O.
+- Lưu checkpoint theo cửa sổ; chạy lại với --resume sẽ bỏ qua các cửa sổ đã hoàn tất.
+- Tạo thư mục HDFS theo lô và upload song song để giảm thời gian ghi nhiều file nhỏ.
 """
 
 from __future__ import annotations

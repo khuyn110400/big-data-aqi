@@ -1,19 +1,16 @@
 """
-Wrapper gọi OpenWeather Air Pollution API. NGƯỜI A · M1
+Client gọi OpenWeather Air Pollution API.
 
-Endpoint (gói Free, 60 calls/phút · 1.000.000 calls/tháng):
+Endpoint (gói Free: 60 call/phút, 1.000.000 call/tháng):
   hiện tại : GET /data/2.5/air_pollution?lat=&lon=&appid=
   lịch sử  : GET /data/2.5/air_pollution/history?lat=&lon=&start=&end=&appid=
   dự báo   : GET /data/2.5/air_pollution/forecast?lat=&lon=&appid=
 
-Lịch sử có từ 27/11/2020, độ phân giải theo giờ, toàn cầu.
-start/end là Unix timestamp UTC (giây).
+Dữ liệu lịch sử có từ 27/11/2020, độ phân giải theo giờ. start/end là Unix timestamp UTC (giây).
 
-TODO(A):
-  [x] retry với exponential backoff cho 429 / 5xx
-  [x] throttle <= 1 call/giây (an toàn dưới hạn 60/phút)
-  [x] 401 -> báo rõ "key chưa active, chờ 10 phút - 2 tiếng", đừng retry vô hạn
-  [x] log số call đã dùng để không đụng hạn tháng
+Client giới hạn tối đa 1 call/giây, retry với exponential backoff khi gặp 429 hoặc 5xx,
+báo lỗi rõ khi gặp 401 (key sai hoặc chưa active, thường phải chờ 10 phút đến vài giờ sau
+khi tạo key) và ghi log số call đã dùng để theo dõi hạn mức tháng.
 """
 import logging
 import os
