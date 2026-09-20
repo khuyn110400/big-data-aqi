@@ -4,7 +4,7 @@
 
 ## 1. Quy mô dữ liệu thu thập
 
-Nguồn: `Big_Data_AQI_Task_A_Data_Platform_FINAL.docx` §3.3 (audit tầng raw sau khi backfill
+Nguồn: `docs/report/Big_Data_AQI_Task_A_Data_Platform_FINAL.docx` §3.3 (audit tầng raw sau khi backfill
 hoàn tất, trước lần chạy Pha 1→2→3 của tag `final-run-stable`). A kết luận "không cần chạy
 lại full backfill", nên số liệu này áp dụng cho cả raw dùng trong lần chạy final.
 
@@ -47,8 +47,7 @@ Biểu đồ: `docs/images/scalability_runtime.png` (thời gian chạy) · `doc
   dòng phải serialize qua lại giữa JVM và tiến trình Python worker (không dùng Arrow
   vectorization), nên chi phí serialize/deserialize không giảm tuyến tính khi thêm
   executor, ngược lại còn cạnh tranh băng thông bộ nhớ trên cùng 1 máy 8 core.
-  → Hướng tối ưu tiếp theo (đã ghi sẵn trong docstring `register_udfs()` của
-  `aqi_core/iaqi.py`): chuyển sang `pandas_udf` để vector hoá theo batch, ước tính
+  → Hướng tối ưu tiếp theo: chuyển sang `pandas_udf` để vector hoá theo batch, ước tính
   nhanh hơn UDF thường ~10x trên khối triệu dòng — nên là việc làm tiếp nếu cần tối ưu
   thêm cho pipeline thật (Kafka streaming + backfill hàng triệu bản ghi).
 

@@ -187,15 +187,3 @@ def iaqi_day(components: dict, standard: str = "VN_1459") -> dict:
     subs = {p: iaqi(components.get(p), p, standard) for p in _HOUR_DAY_COLS}
     subs["o3"] = _iaqi_o3_day(components.get("o3_1h_max"), components.get("o3_8h_max"), standard)
     return _reduce(subs, standard)
-
-
-# ---------------------------------------------------------------------------
-# TODO(B): bản Spark UDF để Pha 2 dùng trên DataFrame
-# ---------------------------------------------------------------------------
-def register_udfs(spark):
-    """
-    Đăng ký `aqi_udf` trả về StructType(aqi, aqi_level, aqi_label, dominant_pollutant).
-
-    Gợi ý: dùng pandas_udf để nhanh hơn python UDF thường ~10x trên khối triệu dòng.
-    """
-    raise NotImplementedError("TODO(B) M1")
