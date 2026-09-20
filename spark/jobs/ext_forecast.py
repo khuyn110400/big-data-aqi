@@ -1,53 +1,46 @@
-"""
-NHÁNH MỞ RỘNG (ngoài lõi) — dự báo AQI 24h. NGƯỜI B · M4.
+"""Dự báo AQI 24 giờ tới cho từng trạm. Đây là nhánh mở rộng, ngoài phần lõi.
 
-Kế hoạch 3 tầng (đã chốt — làm CẢ BA rồi so, KHÔNG phải "chọn 1" như WORKPLAN gốc).
-Cả 3 tầng chạy trong file này:
-  Tầng 1: thay LaSVM bằng SGDRegressor(loss="epsilon_insensitive") — baseline.
-  Tầng 2: Random Forest (Spark MLlib, native) — train PHÂN TÁN THẬT trên toàn bộ Spark
-          DataFrame, không chunk theo tháng + toPandas() như tầng 1 — đây chính là điểm
-          phải chứng minh: scale tốt hơn.
-  Tầng 3: CNN-LSTM (TensorFlow/Keras, train ở driver) — nhận CHUỖI 24 giờ AQI liên tiếp
-          (build_sequence_windows) thay vì lag rời rạc 1h/3h/24h của tầng 1/2.
-          Cần cài tensorflow (xem docs/B_TO_A_RUNBOOK.md); thiếu thì tầng 3 được bỏ qua
-          có báo rõ, tầng 1+2 vẫn chạy. Train ở driver nên dữ liệu chuỗi bị giới hạn bằng
-          --cnn-max-rows (mặc định 300.000 dòng, lấy mẫu ngẫu nhiên trong tập train/test);
-          8,5 triệu chuỗi x 24 giờ không nhét vừa RAM driver và quá chậm trên CPU.
-          Dùng --skip-cnn-lstm để chỉ chạy tầng 1+2.
+Chạy 3 mô hình theo 3 tầng rồi so sánh:
+  Tầng 1: SGDRegressor(loss="epsilon_insensitive"), thay cho LaSVM, làm mốc so sánh.
+  Tầng 2: Random Forest (Spark MLlib). Huấn luyện phân tán trên toàn bộ Spark DataFrame, không
+          chia theo tháng rồi toPandas() như tầng 1; đây là điểm cần cho thấy mô hình mở rộng
+          tốt hơn.
+  Tầng 3: CNN-LSTM (TensorFlow/Keras, huấn luyện ở driver). Đầu vào là chuỗi 24 giờ AQI liên
+          tiếp (build_sequence_windows) thay vì các lag 1h/3h/24h của tầng 1 và 2.
+          Cần cài tensorflow (xem docs/huong-dan-chay.md); nếu thiếu thì tầng 3 bị bỏ qua và
+          có thông báo rõ, tầng 1 và 2 vẫn chạy. Vì huấn luyện ở driver nên số chuỗi bị giới
+          hạn bởi --cnn-max-rows (mặc định 300.000, lấy mẫu ngẫu nhiên trong tập train và
+          test): 8,5 triệu chuỗi x 24 giờ không vừa RAM của driver và quá chậm trên CPU.
+          Dùng --skip-cnn-lstm để chỉ chạy tầng 1 và 2.
 
-VÌ SAO KHÔNG DÙNG LaSVM/SVR THẬT:
-  Spark MLlib không có SVM hồi quy (chỉ có LinearSVC cho phân loại), và cách cập
-  nhật của LaSVM (online, tăng dần theo từng điểm) không parallelize được kiểu
-  Spark. scikit-learn có SVR nhưng độ phức tạp O(n²)-O(n³) theo số dòng — ở quy
-  mô backfill thật (200 trạm x 3-5 năm ~ 5-8 triệu dòng) sẽ treo máy. SGDRegressor
-  với epsilon_insensitive loss chính là SVM TUYẾN TÍNH học theo kiểu ONLINE/TĂNG
-  DẦN (partial_fit) — gần đúng tinh thần LaSVM nhất trong các công cụ có sẵn, và
-  scale được tới hàng triệu dòng vì không bao giờ cần giữ hết dữ liệu trong bộ nhớ
-  cùng lúc.
+Vì sao không dùng LaSVM hoặc SVR thật:
+  Spark MLlib không có SVM hồi quy (chỉ có LinearSVC cho phân loại) và cách cập nhật của
+  LaSVM (online, từng điểm) không song song hoá theo kiểu Spark được. scikit-learn có SVR
+  nhưng độ phức tạp O(n²) đến O(n³) theo số dòng, với 5-8 triệu dòng của backfill sẽ treo máy.
+  SGDRegressor với loss epsilon_insensitive là SVM tuyến tính học online (partial_fit), gần với
+  LaSVM nhất trong các công cụ có sẵn và mở rộng được tới hàng triệu dòng vì không cần giữ hết
+  dữ liệu trong bộ nhớ.
 
-CÁCH "ONLINE" ĐƯỢC GIỮ THẬT (không phải chỉ đặt tên): dữ liệu được chia theo
-THÁNG LỊCH (năm-tháng thật, KHÁC với cột feature "month" 1-12 dùng cho seasonality)
-và train.py gọi partial_fit() TUẦN TỰ theo từng tháng — driver không bao giờ giữ
-quá 1 tháng dữ liệu trong bộ nhớ cùng lúc. Đây là cách "batch đổ xuống" sau này
-(nhiều năm dữ liệu backfill, hoặc dữ liệu streaming mới liên tục) vẫn train được
-mà không phải load hết vào RAM.
+Cách giữ đúng tính "online": dữ liệu được chia theo tháng lịch (năm-tháng thật, khác với
+feature "month" 1-12 dùng cho mùa vụ) và partial_fit() được gọi tuần tự từng tháng, nên driver
+không bao giờ giữ quá một tháng dữ liệu. Nhờ vậy có thể huấn luyện với nhiều năm dữ liệu hoặc
+dữ liệu mới mà không nạp hết vào RAM.
 
-Feature: aqi_lag_1h, aqi_lag_3h, aqi_lag_24h, pm2_5, pm10, o3, no2, so2, co,
-         hour_of_day, month, lat, lon.
-Target : AQI 24 giờ SAU thời điểm hiện tại (dự báo, không phải nowcast).
+Feature: aqi_lag_1h, aqi_lag_3h, aqi_lag_24h, pm2_5, pm10, o3, no2, so2, co, hour_of_day,
+         month, lat, lon.
+Nhãn   : AQI sau đó 24 giờ (dự báo, không phải giá trị hiện tại).
 
-Train/test split THEO THỜI GIAN (không random) — chống rò rỉ tương lai vào quá
-khứ, đúng nguyên tắc time-series: N tháng cuối làm test, còn lại làm train.
+Chia train và test theo thời gian (không chia ngẫu nhiên) để dữ liệu tương lai không rò vào
+quá khứ: các tháng cuối làm test, phần còn lại làm train.
 
-Input : /air-quality/aqi/    (output Pha 2, schema C3)
-Output: in RMSE/MAE/R2 ra console, ghi model (pickle) + feature importance-ish ra --output
-        --backtest-out <file>  — thêm file ext_forecast_backtest.json cho demo (schema C8.2 trong
-        CONTRACTS.md): giá trị thật + dự báo của CẢ 3 tầng cho vài trạm, để chọn model thắng
-        sau đó mà không phải chạy lại. Mô hình dự báo MỘT giá trị: AQI sau đúng 24 giờ.
+Đầu vào : /air-quality/aqi/  (đầu ra Pha 2, schema C3)
+Đầu ra  : in RMSE, MAE, R2 ra console và lưu các model vào --output
+          --backtest-out <file> ghi thêm ext_forecast_backtest.json cho demo (schema C8.2 trong
+          CONTRACTS.md): giá trị thật và dự báo của cả 3 tầng cho vài trạm, để chọn model thắng
+          mà không phải chạy lại. Mô hình chỉ dự báo một giá trị: AQI sau đúng 24 giờ.
 
 Chạy local:
-  python jobs/ext_forecast.py --input /tmp/aqi --output /tmp/forecast_model --backtest-out /tmp/backtest.json
-"""
+  python jobs/ext_forecast.py --input /tmp/aqi --output /tmp/forecast_model --backtest-out /tmp/backtest.json"""
 import argparse
 import json
 import os
@@ -90,8 +83,8 @@ BACKTEST_DAYS = 30
 
 
 def build_forecast_features(df):
-    """Lag feature + target (AQI 24h sau) theo từng trạm. Loại dòng thiếu lag/target
-    (rìa đầu/cuối chuỗi mỗi trạm — không đủ lịch sử hoặc không đủ tương lai để có nhãn)."""
+    """Tạo feature lag và nhãn (AQI 24 giờ sau) theo từng trạm. Bỏ các dòng thiếu lag hoặc thiếu
+    nhãn (đầu và cuối chuỗi của mỗi trạm: chưa đủ lịch sử hoặc chưa có tương lai)."""
     w = Window.partitionBy("station_id").orderBy("ts_epoch")
 
     df = df.withColumn("ts_epoch", F.unix_timestamp("ts_utc"))
@@ -110,7 +103,7 @@ def build_forecast_features(df):
 
 
 def time_based_split(df, test_fraction=TEST_FRACTION):
-    """N tháng cuối (theo chunk_month) làm test — KHÔNG random split, tránh rò rỉ tương lai."""
+    """Lấy các tháng cuối (theo chunk_month) làm test. Không chia ngẫu nhiên để tránh rò rỉ dữ liệu tương lai."""
     months = sorted(r["chunk_month"] for r in df.select("chunk_month").distinct().collect())
     n_test = max(1, int(len(months) * test_fraction))
     train_months, test_months = months[:-n_test], months[-n_test:]
@@ -120,23 +113,21 @@ def time_based_split(df, test_fraction=TEST_FRACTION):
 
 
 def train_sgd_online(spark_df, months, seed=42, epochs=30):
-    """partial_fit() TUẦN TỰ theo từng tháng — driver không bao giờ giữ quá 1 tháng
-    dữ liệu cùng lúc trong bộ nhớ (vẫn đúng tinh thần 'online/tăng dần', không phải
-    load hết vào RAM một lần như .fit() thường).
+    """Huấn luyện SGD bằng partial_fit() tuần tự theo từng tháng, nên driver không giữ quá một tháng
+    dữ liệu cùng lúc (giữ đúng tinh thần học online, không nạp hết vào RAM như fit() thường).
 
-    epochs>1: lặp lại nhiều lượt qua CÙNG các tháng đã có (không phải xem thêm dữ
-    liệu mới) — cần thiết vì bản thân SGDRegressor.fit() mặc định cũng chạy nhiều
-    epoch nội bộ để hội tụ; gọi partial_fit() đúng 1 lần/tháng thường không đủ.
-    Không vi phạm tinh thần "không giữ hết dữ liệu cùng lúc" vì mỗi lượt vẫn chỉ
-    đọc lại 1 tháng tại 1 thời điểm (Spark filter + toPandas() theo từng tháng)."""
+    epochs lớn hơn 1 nghĩa là lặp lại nhiều lượt qua cùng các tháng đó, không thêm dữ liệu mới. Cần
+    thiết vì SGDRegressor.fit() mặc định cũng chạy nhiều epoch để hội tụ, gọi partial_fit() mỗi tháng
+    một lần thường không đủ. Mỗi lượt vẫn chỉ đọc lại một tháng tại một thời điểm (Spark filter rồi
+    toPandas())."""
     from sklearn.linear_model import SGDRegressor
     from sklearn.preprocessing import StandardScaler
 
     model = SGDRegressor(loss="epsilon_insensitive", epsilon=5.0, random_state=seed, max_iter=1)
     scaler = StandardScaler()
 
-    # fit scaler 1 lan duy nhat tren thang dau (dung tinh than online: khong "nhin truoc"
-    # toan bo du lieu de chuan hoa, chi dung thong ke cua du lieu da thay)
+    # Fit scaler một lần trên tháng đầu tiên, đúng tinh thần online: không nhìn trước toàn bộ
+    # dữ liệu để chuẩn hoá, chỉ dùng thống kê của dữ liệu đã thấy.
     first_pdf = spark_df.filter(F.col("chunk_month") == months[0]).select(*FEATURE_COLS, TARGET_COL).toPandas()
     scaler.fit(first_pdf[FEATURE_COLS].values)
 
@@ -171,10 +162,9 @@ def evaluate(model, scaler, spark_df, months):
 
 
 def train_random_forest(train_df, seed=42, num_trees=20, max_depth=5):
-    """Tầng 2 — train PHÂN TÁN THẬT trên toàn bộ train_df cùng lúc (không chunk theo
-    tháng, không toPandas() — khác hẳn cách tầng 1 phải làm vì SGD/SVR không phân tán
-    được). Đây là điểm tier 2 phải chứng minh: RandomForestRegressor tự distribute
-    việc xây cây quyết định qua các partition của Spark."""
+    """Tầng 2: huấn luyện phân tán trên toàn bộ train_df cùng lúc (không chia theo tháng, không
+    toPandas()). Khác tầng 1 vì SGD hay SVR không phân tán được; RandomForestRegressor tự chia việc
+    dựng cây cho các partition của Spark."""
     assembler = VectorAssembler(inputCols=FEATURE_COLS, outputCol="features")
     assembled = assembler.transform(train_df)
     rf = RandomForestRegressor(
@@ -186,8 +176,7 @@ def train_random_forest(train_df, seed=42, num_trees=20, max_depth=5):
 
 
 def evaluate_rf(model, assembler, test_df):
-    """Cùng format kết quả {"rmse","mae","r2","n_test"} như evaluate() của tầng 1
-    để so sánh trực tiếp 2 tầng."""
+    """Trả kết quả cùng dạng {"rmse", "mae", "r2", "n_test"} như evaluate() của tầng 1 để so sánh trực tiếp."""
     predictions = model.transform(assembler.transform(test_df))
     metrics = {}
     for name in ["rmse", "mae", "r2"]:
@@ -207,20 +196,19 @@ def print_feature_importances(model):
 # Tầng 3 — CNN-LSTM trên chuỗi 24 giờ AQI liên tiếp
 # ---------------------------------------------------------------------------
 def build_sequence_windows(df, window_hours=SEQUENCE_WINDOW_HOURS):
-    """
-    Chuỗi window_hours giá trị AQI liên tiếp gần nhất (kết thúc ở giờ hiện tại) + target
-    (AQI 24h sau) — KHÁC lag rời rạc 1h/3h/24h của build_forecast_features() (tầng 1/2):
-    CNN-LSTM cần chuỗi thật liên tục (Conv1D bắt pattern cục bộ, LSTM bắt phụ thuộc dài hạn).
+    """Chuỗi window_hours giá trị AQI liên tiếp gần nhất (kết thúc ở giờ hiện tại) cùng nhãn (AQI
+    24 giờ sau), dùng cho CNN-LSTM. Khác với các lag rời rạc 1h/3h/24h của
+    build_forecast_features() (tầng 1 và 2): CNN-LSTM cần chuỗi liên tục thật để Conv1D bắt mẫu
+    hình cục bộ và LSTM bắt phụ thuộc dài hạn.
 
-    Tái dùng aqi_core.align_hourly_window() để căn đúng vị trí giờ theo timestamp (không
-    dựa vào vị trí mảng — an toàn khi có gap), cùng cơ chế Nowcast của phase2_aqi.py.
+    Dùng aqi_core.align_hourly_window() để đặt đúng vị trí giờ theo timestamp (không dựa vào vị
+    trí trong mảng nên an toàn khi có khoảng thiếu), cùng cơ chế với Nowcast trong phase2_aqi.py.
 
-    seq_0 = giờ CŨ NHẤT (t - window_hours + 1) ... seq_{window_hours-1} = giờ HIỆN TẠI (t)
-    — thứ tự thời gian tự nhiên (oldest -> newest), chuẩn cho input LSTM.
+    seq_0 là giờ cũ nhất (t - window_hours + 1), seq_{window_hours-1} là giờ hiện tại (t), tức thứ
+    tự thời gian tự nhiên từ cũ đến mới, chuẩn cho đầu vào LSTM.
 
-    Loại dòng nào có giờ trong chuỗi bị null (mạng neural không nhận NaN, không tự bịa số
-    điền vào) hoặc thiếu target (rìa cuối chuỗi mỗi trạm — không đủ tương lai để có nhãn).
-    """
+    Bỏ các dòng có giờ nào trong chuỗi bị null (mạng nơ-ron không nhận NaN và không tự điền số)
+    hoặc thiếu nhãn (cuối chuỗi mỗi trạm, chưa đủ tương lai)."""
     w = Window.partitionBy("station_id").orderBy("ts_epoch")
     w_seq = w.rowsBetween(-(window_hours - 1), 0)
 
@@ -242,8 +230,8 @@ def build_sequence_windows(df, window_hours=SEQUENCE_WINDOW_HOURS):
 
 
 def sample_to_pandas(df, max_rows, seed=42):
-    """toPandas() có giới hạn: nhiều hơn max_rows thì lấy mẫu ngẫu nhiên xấp xỉ max_rows dòng
-    (driver không giữ nổi hàng triệu chuỗi x 24 giờ)."""
+    """Chuyển sang pandas có giới hạn: nhiều hơn max_rows thì lấy mẫu ngẫu nhiên xấp xỉ max_rows dòng
+    (driver không chứa nổi hàng triệu chuỗi x 24 giờ)."""
     n = df.count()
     if n > max_rows:
         df = df.sample(withReplacement=False, fraction=max_rows / n, seed=seed)
@@ -251,17 +239,17 @@ def sample_to_pandas(df, max_rows, seed=42):
 
 
 def _sequence_arrays(pdf, scaler=None, fit=False):
-    """Scale TOÀN CỤC (flatten hết giá trị AQI trong chuỗi rồi fit 1 scaler chung) — đúng vì
-    mọi vị trí trong chuỗi đều đo CÙNG 1 đại lượng (AQI), khác tầng 1/2 gồm nhiều feature
-    khác đơn vị. Trả X shape (n, window, 1), y, scaler."""
+    """Chuẩn hoá toàn cục: gộp mọi giá trị AQI trong chuỗi rồi fit một scaler chung. Hợp lý vì mọi
+    vị trí trong chuỗi đều đo cùng một đại lượng (AQI), khác tầng 1 và 2 gồm nhiều feature khác
+    đơn vị. Trả X có shape (n, window, 1), y và scaler."""
     import numpy as np
     from sklearn.preprocessing import StandardScaler
 
     X = pdf[SEQ_COLS].to_numpy(dtype="float32")
     y = pdf[TARGET_COL].to_numpy(dtype="float32")
     if fit:
-        # nhãn cũng được chuẩn hoá: AQI ~50-500 chưa scale làm loss khởi đầu rất lớn, Adam
-        # hội tụ chậm và mô hình bị huấn luyện thiếu so với tầng 1/2 (RF không cần scale).
+        # Chuẩn hoá cả nhãn: AQI cỡ 50-500 nếu để nguyên làm loss ban đầu rất lớn, Adam hội tụ
+        # chậm và mô hình bị huấn luyện thiếu so với tầng 1 và 2 (Random Forest không cần chuẩn hoá).
         scaler = {"x": StandardScaler().fit(X.reshape(-1, 1)), "y_mean": float(y.mean()),
                   "y_std": float(y.std()) or 1.0}
     scaled = scaler["x"].transform(X.reshape(-1, 1)).reshape(X.shape).astype("float32")
@@ -279,7 +267,7 @@ def build_cnn_lstm(window_hours=SEQUENCE_WINDOW_HOURS):
         layers.Dense(16, activation="relu"),
         layers.Dense(1),
     ])
-    # loss="mse": mô hình tối ưu sai số bình phương (khớp RMSE), có thể kém MAE hơn tầng 1/2
+    # loss="mse" tối ưu sai số bình phương (khớp với RMSE) nên MAE có thể kém hơn tầng 1 và 2
     model.compile(optimizer="adam", loss="mse", metrics=["mae"])
     return model
 
@@ -473,11 +461,11 @@ def main():
         SparkSession.builder.appName("ext_forecast")
         .master(os.environ.get("SPARK_MASTER", "local[*]"))
         .config("spark.sql.session.timeZone", "UTC")
-        # RandomForestRegressor (Tang 2) OOM voi driver mac dinh -Xmx1g (PySpark tu dat
-        # khi khong cau hinh) du data nho - findBestSplits collect thong ke ve driver,
-        # ton nhieu bo nho hon DataFrame op thuong. 2g van tran tren du lieu mau 9k dong khi
-        # chay ca quy trinh (SGD ~90 job Spark truoc roi moi toi RF), nen mac dinh 4g.
-        # Chi co tac dung khi chay `python ...`; voi spark-submit dung --driver-memory.
+        # RandomForestRegressor bị tràn bộ nhớ với driver mặc định -Xmx1g (PySpark tự đặt khi
+        # không cấu hình) dù dữ liệu nhỏ, vì findBestSplits gom thống kê về driver, tốn hơn các
+        # phép DataFrame thường. 2g vẫn tràn trên dữ liệu mẫu 9 nghìn dòng khi chạy cả quy trình
+        # (SGD chạy khoảng 90 job Spark trước khi tới Random Forest), nên mặc định là 4g. Chỉ có
+        # tác dụng khi chạy bằng `python ...`; với spark-submit hãy dùng --driver-memory.
         .config("spark.driver.memory", os.environ.get("EXT_DRIVER_MEMORY", "4g"))
         .getOrCreate()
     )

@@ -1,45 +1,40 @@
 """
-NHÁNH MỞ RỘNG (ngoài lõi) — phân cụm vùng. NGƯỜI B · M4.
+Phân cụm vùng theo (thành phố, tháng) trên kết quả Pha 2. Đây là nhánh mở rộng, ngoài phần lõi.
 
-Kế hoạch 3 tầng (đã chốt với người dùng — làm CẢ BA rồi so, KHÔNG phải "chọn 1" như
-WORKPLAN gốc ghi, vì đã xác nhận chấp nhận tốn thêm thời gian). Cả 3 tầng chạy trong file này:
-  Tầng 1: K-means (Spark MLlib) — baseline. (fit_kmeans)
-  Tầng 2: GMM và Bisecting K-means (Spark MLlib) — chạy CẢ HAI rồi so với K-means để
-          chọn thuật toán hợp dữ liệu, không chọn bừa. (fit_gmm, fit_bisecting_kmeans)
-  Tầng 3: DBSCAN và HDBSCAN (scikit-learn ở driver — Spark MLlib không có; dữ liệu
-          (city, tháng) rất nhỏ nên không cần phân tán). (fit_dbscan, fit_hdbscan)
-  compare_clustering_algorithms() chạy cả 5 và chọn thuật toán thắng theo silhouette.
+Chạy 5 thuật toán chia thành 3 tầng rồi so sánh:
+  Tầng 1: K-means (Spark MLlib), làm mốc so sánh   (fit_kmeans)
+  Tầng 2: GMM và Bisecting K-means (Spark MLlib)   (fit_gmm, fit_bisecting_kmeans)
+  Tầng 3: DBSCAN và HDBSCAN (scikit-learn chạy ở driver vì Spark MLlib không có; dữ liệu
+          (thành phố, tháng) rất nhỏ nên không cần phân tán)   (fit_dbscan, fit_hdbscan)
+compare_clustering_algorithms() chạy cả 5 và chọn thuật toán thắng theo silhouette.
 
-SO SÁNH CÔNG BẰNG GIỮA 5 THUẬT TOÁN:
-  - Silhouette của Spark (ClusteringEvaluator) mặc định dùng khoảng cách squaredEuclidean,
-    sklearn dùng Euclidean -> hai con số KHÔNG so được với nhau. Nên bảng so sánh cuối tính
-    lại silhouette cho cả 5 bằng common_silhouette() (Euclidean, cùng ma trận feature đã
-    chuẩn hoá). Silhouette nội bộ của Spark chỉ còn dùng để chọn k trong TỪNG thuật toán.
-  - DBSCAN/HDBSCAN gán nhãn -1 cho điểm nhiễu; silhouette bỏ các điểm này nên thuật toán
-    vứt nhiều điểm sẽ được điểm cao giả tạo. Vì vậy chỉ nhận cấu hình có tỉ lệ nhiễu
-    <= MAX_NOISE_FRACTION, và bảng tổng kết in kèm tỉ lệ nhiễu của mỗi thuật toán.
-  - Silhouette còn thưởng cho việc băm thành nhiều cụm siêu nhỏ, nên tầng 3 bị giới hạn
-    <= MAX_CLUSTERS cụm, cùng ngân sách số cụm với dải k của tầng 1/2.
+Cách so sánh công bằng:
+  - ClusteringEvaluator của Spark mặc định dùng khoảng cách squaredEuclidean còn sklearn dùng
+    Euclidean, nên hai con số không so được với nhau. Bảng so sánh cuối vì vậy tính lại
+    silhouette cho cả 5 thuật toán bằng common_silhouette() (Euclidean, cùng ma trận feature
+    đã chuẩn hoá). Silhouette của Spark chỉ còn dùng để chọn k bên trong từng thuật toán.
+  - DBSCAN và HDBSCAN gán nhãn -1 cho điểm nhiễu và silhouette bỏ các điểm này, nên thuật toán
+    bỏ nhiều điểm sẽ được điểm cao giả tạo. Do đó chỉ nhận cấu hình có tỉ lệ nhiễu không quá
+    MAX_NOISE_FRACTION, và bảng tổng kết in kèm tỉ lệ nhiễu của từng thuật toán.
+  - Silhouette còn thưởng cho việc chia thành nhiều cụm rất nhỏ, nên tầng 3 bị giới hạn không
+    quá MAX_CLUSTERS cụm, bằng số cụm tối đa mà tầng 1 và tầng 2 được thử.
 
-Feature: avg_pm2_5, avg_pm10, avg_o3, avg_no2 (trung bình theo (city, tháng))
-         + lat, lon, tháng (1-12).
+Feature: avg_pm2_5, avg_pm10, avg_o3, avg_no2 (trung bình theo thành phố và tháng), cộng lat,
+lon và tháng (1-12).
 
-QUYẾT ĐỊNH THIẾT KẾ:
-  - Nhóm theo (city, THÁNG) chứ không phải (city, năm-tháng) — cố tình gộp cùng
-    tháng qua nhiều năm để bắt đúng pattern MÙA VỤ (climate/seasonal), khớp gợi ý
-    "thêm chiều mùa" đã ghi trong TODO cũ của phase3_aggregate.py. Nếu dữ liệu
-    chỉ có 1 năm (như sample hiện tại), kết quả tương đương group theo tháng lịch.
-  - k (số cụm) KHÔNG hardcode tuỳ tiện — chọn bằng silhouette score trên 1 dải k,
-    in ra để người đọc thấy rõ căn cứ chọn (không bịa số).
-  - StandardScaler bắt buộc trước KMeans: avg_pm2_5 (đơn vị µg/m³, hàng chục) và
-    lat/lon (hàng chục, nhưng ý nghĩa khác hẳn) lệch scale nhau rất nhiều, không
-    chuẩn hoá thì lat/lon sẽ áp đảo khoảng cách Euclidean một cách giả tạo.
-  - Output KHÔNG có trong CONTRACTS.md (nhánh mở rộng, không phải C2) — dùng
-    namespace riêng /air-quality/ext/clusters/ để tách bạch, không đụng contract.
+Các quyết định thiết kế:
+  - Nhóm theo (thành phố, tháng trong năm) chứ không phải (thành phố, năm-tháng): gộp cùng
+    một tháng của nhiều năm để bắt được mùa vụ. Với dữ liệu chỉ có một năm thì kết quả giống
+    nhóm theo tháng lịch.
+  - Số cụm k không đặt cố định mà chọn bằng silhouette trên một dải k, và in ra để có căn cứ.
+  - Phải chuẩn hoá bằng StandardScaler trước khi phân cụm: nồng độ (chục µg/m³) và lat/lon lệch
+    thang đo rất nhiều, nếu không chuẩn hoá thì lat/lon áp đảo khoảng cách Euclidean.
+  - Đầu ra không nằm trong CONTRACTS.md (đây là nhánh mở rộng, không thuộc C2) nên dùng thư
+    mục riêng /air-quality/ext/clusters/.
 
-Input : /air-quality/aqi/        (output Pha 2, schema C3)
-Output: /air-quality/ext/clusters/  — city, month, avg_*, cluster label
-        --json-out <file>  — thêm file ext_clusters.json cho demo (schema C8.1 trong CONTRACTS.md)
+Đầu vào : /air-quality/aqi/  (đầu ra Pha 2, schema C3)
+Đầu ra  : /air-quality/ext/clusters/  gồm city, month, avg_* và nhãn cụm
+          --json-out <file> ghi thêm ext_clusters.json cho demo (schema C8.1 trong CONTRACTS.md)
 
 Chạy local:
   python jobs/ext_clustering.py --input /tmp/aqi --output /tmp/clusters --json-out /tmp/ext_clusters.json
@@ -64,20 +59,20 @@ from pyspark.sql import functions as F
 FEATURE_COLS = ["avg_pm2_5", "avg_pm10", "avg_o3", "avg_no2", "lat", "lon", "month"]
 K_CANDIDATES = [2, 3, 4, 5, 6]
 
-# Tầng 3: lưới tham số quét (rẻ vì chỉ ~vài nghìn điểm city x tháng); lưới rộng để dùng được
-# cả với dữ liệu mẫu 20 điểm lẫn dữ liệu thật ~2.400 điểm.
+# Tầng 3: lưới tham số cần quét. Lưới đủ rộng để dùng được cả với dữ liệu mẫu 20 điểm lẫn dữ
+# liệu thật khoảng 2.400 điểm; quét rẻ vì chỉ có vài nghìn điểm (thành phố, tháng).
 DBSCAN_EPS = (0.3, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0)
 DBSCAN_MIN_SAMPLES = (2, 3, 5, 8)
 HDBSCAN_MIN_CLUSTER_SIZE = (2, 3, 5, 8, 12)
 MAX_NOISE_FRACTION = 0.2
-# Tầng 1/2 chỉ thử k <= max(K_CANDIDATES); tầng 3 cũng bị giới hạn số cụm như vậy. Không có
-# giới hạn này silhouette thưởng cho việc băm thành nhiều cụm siêu nhỏ (đã gặp: HDBSCAN
-# min_cluster_size=2 cho 7 cụm, silhouette 0.87, thắng cách chia đúng 2 cụm ở 0.74).
+# Số cụm tối đa của tầng 3 bằng số cụm tối đa mà tầng 1 và 2 được thử (max K_CANDIDATES). Nếu
+# không giới hạn, silhouette sẽ thưởng cho việc chia thành nhiều cụm nhỏ: đã gặp HDBSCAN với
+# min_cluster_size=2 cho 7 cụm, silhouette 0.87, cao hơn cách chia đúng 2 cụm (0.74).
 MAX_CLUSTERS = max(K_CANDIDATES)
 
 
 def build_city_month_features(df):
-    """(city, tháng) -> trung bình nồng độ các chất chính + toạ độ."""
+    """Trung bình nồng độ các chất chính và toạ độ theo (city, tháng)."""
     df = df.withColumn("month", F.month("ts_utc"))
     return df.groupBy("city", "country", "month").agg(
         F.avg("pm2_5").alias("avg_pm2_5"),
@@ -91,12 +86,11 @@ def build_city_month_features(df):
 
 
 def _assemble_and_scale(df):
-    # withMean=False (KHONG tru trung binh): da phat hien Spark BisectingKMeans suy bien
-    # ve DUY NHAT 1 cum khi feature vector bi mean-center (co gia tri am) - test truc
-    # tiep xac nhan withMean=True lam BisectingKMeans luon tra ve 1 cum bat ke k/seed, con
-    # withMean=False tach dung. Doi voi KMeans/GMM, ket qua GIONG HET nhau du co centering
-    # hay khong (khoang cach Euclidean bat bien khi dich chuyen deu tat ca diem cung 1 vector)
-    # -> day la fix an toan tuyet doi, khong danh doi gi cho 2 thuat toan kia.
+    # withMean=False (không trừ trung bình): khi vector feature đã trừ trung bình (có giá trị
+    # âm), BisectingKMeans của Spark suy biến về đúng 1 cụm bất kể k hay seed; đã kiểm tra
+    # trực tiếp. KMeans và GMM cho cùng kết quả dù có trừ trung bình hay không, vì khoảng cách
+    # Euclidean không đổi khi dịch mọi điểm cùng một vector, nên cách đặt này không ảnh hưởng
+    # hai thuật toán đó.
     assembler = VectorAssembler(inputCols=FEATURE_COLS, outputCol="features_raw")
     scaler = StandardScaler(inputCol="features_raw", outputCol="features", withMean=False, withStd=True)
     assembled = assembler.transform(df)
@@ -104,10 +98,9 @@ def _assemble_and_scale(df):
 
 
 def _pick_best_k(scaled_df, algo_cls, k_candidates=K_CANDIDATES, seed=42):
-    """Chọn k bằng silhouette score cho MỘT thuật toán bất kỳ (KMeans/GaussianMixture/
-    BisectingKMeans — cả 3 đều nhận k/seed/featuresCol/predictionCol giống nhau trong
-    Spark MLlib nên tổng quát hoá được, không viết lại cho từng thuật toán).
-    KHÔNG hardcode k tuỳ tiện. In bảng để có căn cứ."""
+    """Chọn k bằng silhouette cho một thuật toán bất kỳ trong KMeans, GaussianMixture,
+    BisectingKMeans (cả ba nhận k, seed, featuresCol, predictionCol giống nhau trong Spark
+    MLlib nên dùng chung được một hàm). In bảng điểm theo k để có căn cứ chọn."""
     evaluator = ClusteringEvaluator(featuresCol="features", predictionCol="cluster")
     scores = {}
     for k in k_candidates:
@@ -118,9 +111,9 @@ def _pick_best_k(scaled_df, algo_cls, k_candidates=K_CANDIDATES, seed=42):
             result = model.transform(scaled_df)
             scores[k] = evaluator.evaluate(result)
         except Exception as e:
-            # BisectingKMeans (va ly thuyet ca GMM) co the sinh cum suy bien (thuc te
-            # chi con 1 cum) tren du lieu nho/gan trung nhau -> ClusteringEvaluator
-            # crash thay vi tra diem thap. Bo qua k nay, thu k khac, dung crash ca lenh so sanh.
+            # BisectingKMeans (về lý thuyết cả GMM) có thể sinh cụm suy biến (thực tế chỉ còn
+            # 1 cụm) trên dữ liệu nhỏ hoặc gần trùng nhau, khiến ClusteringEvaluator báo lỗi
+            # thay vì trả điểm thấp. Bỏ qua k này và thử k khác để không làm hỏng cả lệnh so sánh.
             print(f"  k={k}: bo qua (loi khi fit/evaluate - {type(e).__name__})")
 
     if not scores:
@@ -135,7 +128,7 @@ def _pick_best_k(scaled_df, algo_cls, k_candidates=K_CANDIDATES, seed=42):
 
 
 def pick_best_k(scaled_df, k_candidates=K_CANDIDATES, seed=42):
-    """Giữ lại cho tương thích ngược (test tầng 1 dùng gián tiếp qua fit_kmeans)."""
+    """Chọn k cho K-means (test tầng 1 gọi gián tiếp qua fit_kmeans)."""
     return _pick_best_k(scaled_df, KMeans, k_candidates=k_candidates, seed=seed)
 
 
@@ -168,8 +161,8 @@ def fit_bisecting_kmeans(df, k=None, seed=42):
 
 
 def common_silhouette(X, labels):
-    """Silhouette Euclidean bỏ điểm nhiễu (-1) — MỘT thước đo chung cho cả 5 thuật toán.
-    Trả None nếu không có >= 2 cụm thật (sklearn không tính được)."""
+    """Silhouette Euclidean bỏ điểm nhiễu (-1), dùng chung một thước đo cho cả 5 thuật toán.
+    Trả None nếu không có ít nhất 2 cụm thật (sklearn không tính được)."""
     from sklearn.metrics import silhouette_score
 
     mask = labels != -1
@@ -180,7 +173,7 @@ def common_silhouette(X, labels):
 
 
 def _matrix_and_labels(result_df):
-    """Ma trận feature đã chuẩn hoá + nhãn cụm, lấy trong CÙNG một lần collect nên thứ tự khớp."""
+    """Ma trận feature đã chuẩn hoá và nhãn cụm, lấy trong cùng một lần collect nên thứ tự khớp nhau."""
     import numpy as np
 
     pdf = result_df.select("features", "cluster").toPandas()
@@ -329,7 +322,7 @@ def main():
     print(f"So dong (city x thang): {n_features}")
 
     if args.k is not None:
-        # k co dinh, nguoi dung tu chon -> giu tang 1 (KMeans) don gian, khong so sanh
+        # k do người dùng chỉ định: chỉ chạy K-means (tầng 1), không so sánh các thuật toán
         result, model, k, silhouette = fit_kmeans(features, k=args.k)
         best_name = "KMeans"
         print(f"K-means k={k}, silhouette={silhouette:.4f}")
