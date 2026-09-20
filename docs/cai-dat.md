@@ -109,7 +109,7 @@ pytest                      # 97 test
 |---|---|
 | Kafka | `apache/kafka:3.8.0` (KRaft, một node, không cần ZooKeeper cho Kafka) |
 | HDFS | `bde2020/hadoop-namenode` và `hadoop-datanode` `2.0.0-hadoop3.2.1-java8` (Hadoop 3.2.1) |
-| Spark (master, worker) | `bitnamilegacy/spark:3.5` |
+| Spark (master, worker) | `bitnamilegacy/spark:3.5` (báo cáo kết quả ghi Spark 3.5.6 trong container) |
 | ZooKeeper (cho HBase) | `zookeeper:3.8` |
 | HBase | `bde2020/hbase-master` và `hbase-regionserver` `1.0.0-hbase1.2.6` (HBase 1.2.6) |
 | FastAPI | Python 3.12, `fastapi`, `uvicorn`, `happybase` (xem `serving/requirements.txt`) |
@@ -172,9 +172,11 @@ Ghi chú: các image `bitnami/spark` cũ đã chuyển sang tổ chức `bitnami
 | Spark worker | `SPARK_WORKER_MEMORY=2G`, `SPARK_WORKER_CORES=2` | Giới hạn theo RAM của WSL2 |
 | Job Spark | `--driver-memory 2g` (Pha 1→3, nạp HBase), `4g` (`ext_forecast.py`), `6g` (Pha 1 bản v4) | Pha 1 trên 5 năm dữ liệu và Random Forest ở driver là hai bước nặng nhất; `ext_forecast.py` từng tràn heap ở 2g |
 | Pha 1 v4 | `spark.sql.shuffle.partitions=96`, `spark.default.parallelism=96`, `spark.network.timeout=600s`, `spark.executor.heartbeatInterval=30s` | Bản chạy trên toàn bộ 8,58 triệu bản ghi, chia thành 3 giai đoạn có thể chạy tiếp khi bị ngắt (`scripts/run_phase1_v4.sh`) |
+| Đo scalability | 4 worker tạm, `SPARK_WORKER_CORES=1`, `SPARK_WORKER_MEMORY=1536M`; driver 2 GB, executor 768 MB, `spark.cores.max` = 1, 2, 4 | Mỗi worker 1 core để số executor bằng số core được cấp; script `scripts/run_scalability_distributed.sh` dựng và dọn các worker này |
 | Backfill | Cửa sổ 90 ngày, throttle ≤ 1 call/giây, checkpoint trong `.state/` | Một call lấy được đủ 90 ngày; 4.200 call cho 200 trạm × 5 năm |
 | Nạp HBase | `--since 2026-06-01` | Khoảng 90 ngày (≈ 440 nghìn dòng) đủ cho dashboard; nạp cả 5 năm qua Thrift rất lâu |
-| Dự báo | Random Forest `num_trees=20`, `max_depth=5` | Giảm so với thiết kế gốc (100 và 10) do giới hạn tài nguyên khi huấn luyện trên driver với ~8,5 triệu dòng |
+| Dự báo | `--since 2025-09-01` | Chỉ dùng dữ liệu từ 01/09/2025 (1.590.752 dòng có đủ feature) thay vì cả 5 năm, để vừa bộ nhớ driver |
+| Dự báo | Random Forest `num_trees=20`, `max_depth=5` | Giảm so với thiết kế gốc (100 và 10) do giới hạn tài nguyên khi huấn luyện trên driver |
 | Dự báo | `--cnn-max-rows 300000`, `--cnn-epochs 30` (có early stopping) | CNN-LSTM chạy trên CPU của driver nên phải lấy mẫu chuỗi |
 
 Nếu máy có ít RAM hơn: chạy Pha 1 theo từng nước (`--input .../raw/ingest_mode=history/country=VN`), rút ngắn

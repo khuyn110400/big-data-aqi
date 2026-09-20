@@ -140,13 +140,15 @@ Trên Spark DataFrame, "Mapper" tương ứng với `withColumn` / `map` và "Re
 ├── data/
 │   ├── fixtures/           response nguyên bản của API
 │   └── samples/            dữ liệu mẫu để chạy Spark cục bộ không cần hạ tầng
-├── final_results/json/     kết quả phân cụm và backtest dự báo của lần chạy cuối
+├── final_results/
+│   ├── json/               kết quả phân cụm và backtest dự báo của lần chạy cuối
+│   └── scalability/        kết quả đo scalability Pha 2 (CSV thời gian, speedup, xác nhận executor)
 └── docs/
     ├── cai-dat.md          cài đặt, cấu hình máy, kết nối HBase–HDFS, tham số đã chỉnh
     ├── huong-dan-chay.md   các lệnh chạy Pha 1→3, nạp HBase, streaming, phân cụm, dự báo
     ├── experiments.md      số liệu thực nghiệm
     ├── images/, experiments_data/   biểu đồ và số đo thô của thực nghiệm scalability
-    └── report/             báo cáo Word của phần thu thập dữ liệu
+    └── report/             báo cáo Word: thu thập dữ liệu, kết quả lần chạy cuối
 ```
 
 ## 5. Các thành phần chính
@@ -280,6 +282,7 @@ Hai endpoint `/ext/*` chỉ đọc file JSON trong `final_results/json/` (nếu 
 | `scripts/02_init_hdfs.sh` | Tạo cây thư mục HDFS theo C2 |
 | `scripts/03_init_hbase.sh` | Tạo bảng `air_quality` theo C4 |
 | `scripts/run_phase1_v4.sh` | Chạy Pha 1 bản chịu lỗi trong container `spark-master` |
+| `scripts/run_scalability_distributed.sh` | Đo scalability Pha 2 với 4 worker Spark Standalone (1 core mỗi worker) |
 | `scripts/generate_grafana_dashboard.py` | Sinh `grafana/dashboards/aqi-overview.json` |
 | `scripts/generate_cities_200.py`, `curate_global_50.py` | Dựng danh sách 200 điểm trong `cities.json` |
 | `grafana/` | Dashboard (UID `aqi-big-data-overview`, file `dashboards/aqi-overview.json`) và provisioning; datasource Infinity trỏ vào `http://serving-api:8000` |
@@ -291,15 +294,15 @@ Chi tiết, kèm các hạn chế của từng phép đo, ở [docs/experiments.
 | Nội dung | Kết quả |
 |---|---|
 | Dữ liệu thu thập | 200 điểm, 2021-09-01 → 2026-09-01, 8.576.904 bản ghi thô (97,80% so với kỳ vọng; phần thiếu là thiếu ở nguồn OpenWeather), 279,4 MB nén |
-| Scalability Pha 2 (đo `local[N]` trên máy 8 core) | 8M bản ghi: 567,7 s với 1 executor, 204,5 s với 4 executor, tăng tốc 2,78 lần; speedup tăng theo kích thước dữ liệu |
+| Scalability Pha 2 (Spark Standalone, executor thật) | 8M bản ghi: 749,3 s với 1 executor, 308,8 s với 4 executor, tăng tốc 2,43 lần; speedup tăng theo kích thước dữ liệu (ở 100K dòng thì 4 executor không nhanh hơn 2) |
 | Phân cụm | K-means k=3 chọn theo silhouette, giá trị 0,3547 (cấu trúc yếu theo thang Kaufman & Rousseeuw) nhưng ba cụm giải thích được: nền chung, ô nhiễm nặng, sạch |
 | Dự báo AQI 24 giờ | Random Forest thắng nhẹ: RMSE 20,10, R² 0,7297; SGD và CNN-LSTM sát sau (R² 0,7243 và 0,7251) |
 
 Một số hạn chế cần biết khi đọc các con số trên (giải thích đầy đủ trong `docs/experiments.md`):
-scalability đo bằng `local[N]` trên một máy chứ không phải cụm nhiều máy; Random Forest chạy với tham số
-nhỏ hơn thiết kế (`num_trees=20`, `max_depth=5`) do giới hạn bộ nhớ trên driver; tập test của CNN-LSTM
-nhỏ hơn hai tầng còn lại nên không so sánh trực tiếp được; bảng so sánh 5 thuật toán phân cụm không được
-lưu ở lần chạy gốc nên được tái tạo lại từ file kết quả, và K-means chỉ hơn Bisecting K-means 0,015 silhouette.
+scalability đo bằng các executor chạy trên cùng một máy (container Docker) chứ không phải cụm nhiều máy, và mỗi
+cấu hình chỉ đo một lần; Random Forest chạy với tham số nhỏ hơn thiết kế (`num_trees=20`, `max_depth=5`) do giới
+hạn tài nguyên trên driver; tập test của CNN-LSTM nhỏ hơn hai tầng còn lại nên không so sánh trực tiếp được;
+K-means chỉ hơn Bisecting K-means 0,015 silhouette.
 
 ## 7. Chạy thử
 
@@ -353,5 +356,5 @@ nằm ở [docs/cai-dat.md](docs/cai-dat.md).
 - [docs/cai-dat.md](docs/cai-dat.md): cài đặt, cấu hình, kết nối và tham số
 - [docs/huong-dan-chay.md](docs/huong-dan-chay.md): lệnh chạy từng bước
 - [docs/experiments.md](docs/experiments.md): số liệu thực nghiệm
-- [docs/report/](docs/report/): báo cáo Word của phần thu thập dữ liệu
+- [docs/report/](docs/report/): hai báo cáo Word, một của phần thu thập dữ liệu và một của kết quả lần chạy cuối
 - [data/samples/README.md](data/samples/README.md): cách dữ liệu mẫu được hiệu chỉnh

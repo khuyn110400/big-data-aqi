@@ -16,6 +16,7 @@ Phân cụm và dự báo chỉ cần `/air-quality/aqi` nên chạy được ng
 | 3 | Streaming Kafka → AQI → HBase và HDFS | (tuỳ chọn) |
 | 4 | Phân cụm và dự báo | `ext_clusters.json`, `ext_forecast_backtest.json` |
 | 5 | Đưa kết quả vào FastAPI/Grafana và ghi lại số liệu | |
+| 6 | (Tuỳ chọn) Đo scalability Pha 2 | `final_results/scalability/` |
 
 Dữ liệu thô (`/air-quality/raw`) do collector tạo ra từ trước bằng `collector/src/backfill_history.py`
 (lịch sử) và `collector/src/live_poller.py` (hiện tại).
@@ -230,6 +231,26 @@ docker cp spark-master:/tmp/ext_forecast_backtest.json ./ext_forecast_backtest.j
    - Bảng tổng kết phân cụm (5 thuật toán) và bảng dự báo (3 tầng), kèm câu lệnh và `--since`.
    - Ảnh chụp dashboard.
    - Mã commit của code đã chạy (`git rev-parse HEAD`).
+
+---
+
+## 6. Đo scalability Pha 2 (tuỳ chọn)
+
+Đo thời gian Pha 2 trên dữ liệu tổng hợp 100K, 1M, 8M dòng với 1, 2, 4 executor thật (Spark Standalone,
+mỗi worker 1 core). Cần stack Docker đang chạy (`spark-master`, `spark-worker`):
+
+```bash
+bash scripts/run_scalability_distributed.sh
+```
+
+Script dựng 4 worker tạm cạnh `spark-master`, chạy 9 cấu hình (mỗi cấu hình một tiến trình Spark riêng), đếm số
+executor thực tế trong log và dừng nếu sai, rồi ghi `scalability_results.csv`, `scalability_speedup.csv`,
+`executor_verification.txt` và `summary.md` vào `final_results/scalability/`. Lúc kết thúc (kể cả khi lỗi), script
+xoá các worker tạm và bật lại `spark-worker`. Tổng thời gian đo ghi trong CSV là khoảng 28 phút (cấu hình 8M dòng với 1 executor
+mất khoảng 12,5 phút), chưa tính thời gian khởi động và dựng worker.
+
+Để đo nhanh trên máy không có Docker: `bash spark/experiments/run_scalability.sh` (chế độ `local[N]`, chỉ để
+tham khảo, xem [experiments.md](experiments.md) mục 2.2).
 
 ---
 
