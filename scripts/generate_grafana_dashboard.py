@@ -26,7 +26,7 @@ def col(selector, title, type_, timestamp_format=None):
     return x
 
 
-def query(ref_id, url, columns, fmt="table"):
+def query(ref_id, url, columns, fmt="table", root_selector=""):
     return {
         "refId": ref_id,
         "datasource": DS,
@@ -39,7 +39,7 @@ def query(ref_id, url, columns, fmt="table"):
             "method": "GET",
             "data": "",
         },
-        "root_selector": "",
+        "root_selector": root_selector,
         "columns": columns,
         "filters": [],
         "computed_columns": [],
@@ -110,6 +110,31 @@ pollutant_columns = [
 ]
 
 
+cluster_columns = [
+    col("city", "City", "string"),
+    col("country", "Country", "string"),
+    col("month", "Month", "number"),
+    col("avg_pm2_5", "Avg PM2.5", "number"),
+    col("avg_pm10", "Avg PM10", "number"),
+    col("avg_o3", "Avg O3", "number"),
+    col("avg_no2", "Avg NO2", "number"),
+    col("cluster", "Cluster", "number"),
+]
+
+forecast_columns = [
+    col(
+        "ts_utc",
+        "Time",
+        "timestamp",
+        "2006-01-02T15:04:05Z07:00",
+    ),
+    col("actual", "Actual AQI", "number"),
+    col("sgd", "SGD T1", "number"),
+    col("rf", "Random Forest T2", "number"),
+    col("cnn_lstm", "CNN-LSTM T3", "number"),
+]
+
+
 dashboard = {
     "id": None,
     "uid": "aqi-big-data-overview",
@@ -177,6 +202,18 @@ dashboard = {
                     "selected": True,
                     "text": "2026-09-18",
                     "value": "2026-09-18",
+                },
+                "hide": 0,
+            },
+            {
+                "name": "cluster_month",
+                "label": "Cluster Month",
+                "type": "textbox",
+                "query": "8",
+                "current": {
+                    "selected": True,
+                    "text": "8",
+                    "value": "8",
                 },
                 "hide": 0,
             },
@@ -419,6 +456,73 @@ dashboard = {
                 "legend": {
                     "displayMode": "list",
                     "placement": "bottom",
+                },
+                "tooltip": {
+                    "mode": "multi",
+                },
+            },
+        },
+        {
+            "id": 7,
+            "title": "AQI Clustering — Month ${cluster_month}",
+            "description": "Cluster assignment and monthly pollutant averages.",
+            "type": "table",
+            "datasource": DS,
+            "gridPos": {
+                "h": 9,
+                "w": 12,
+                "x": 0,
+                "y": 27,
+            },
+            "targets": [
+                query(
+                    "A",
+                    f"{BASE}/ext/clusters?month=${{cluster_month}}",
+                    cluster_columns,
+                    root_selector="rows",
+                )
+            ],
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": [],
+            },
+            "options": {
+                "showHeader": True,
+                "cellHeight": "sm",
+            },
+        },
+        {
+            "id": 8,
+            "title": "AQI Forecast +24h — ${station_id}",
+            "description": "Actual AQI versus SGD, Random Forest and CNN-LSTM backtest.",
+            "type": "timeseries",
+            "datasource": DS,
+            "gridPos": {
+                "h": 9,
+                "w": 12,
+                "x": 12,
+                "y": 27,
+            },
+            "targets": [
+                query(
+                    "A",
+                    f"{BASE}/ext/forecast?station_id=${{station_id}}",
+                    forecast_columns,
+                    fmt="timeseries",
+                    root_selector="rows",
+                )
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "none",
+                },
+                "overrides": [],
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": ["lastNotNull"],
                 },
                 "tooltip": {
                     "mode": "multi",

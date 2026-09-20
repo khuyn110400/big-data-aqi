@@ -144,27 +144,70 @@ def add_day_aggregates(df):
 
 
 def print_quality_report(df):
-    total = df.count()
-    print(f"\n=== Báo cáo chất lượng dữ liệu (Pha 1) ===")
-    print(f"Tổng số giờ (sau dựng lưới đầy đủ): {total}")
+    # Gom thống kê theo giờ vào một Spark action.
+    agg_exprs = [F.count(F.lit(1)).alias("total")]
+
     for p in POLLUTANTS:
-        missing = df.filter(F.col(f"{p}_qc") == "missing").count()
-        interpolated = df.filter(F.col(f"{p}_qc") == "interpolated").count()
-        print(f"  {p:<6}: thiếu={missing:>5} ({missing / total:.1%})  "
-              f"đã nội suy={interpolated:>5} ({interpolated / total:.1%})")
+        agg_exprs.extend([
+            F.sum(
+                F.when(F.col(f"{p}_qc") == "missing", 1).otherwise(0)
+            ).alias(f"{p}_missing"),
+            F.sum(
+                F.when(F.col(f"{p}_qc") == "interpolated", 1).otherwise(0)
+            ).alias(f"{p}_interpolated"),
+        ])
 
-    days = df.select("station_id", "aqi_day", "day_qc_flag").dropDuplicates(["station_id", "aqi_day"])
-    total_days = days.count()
-    valid_days = days.filter(F.col("day_qc_flag") == "valid").count()
-    print(f"Ngày hợp lệ cho AQI ngày (>= {MIN_DAY_COMPLETENESS:.0%} dữ liệu): "
-          f"{valid_days}/{total_days} ({valid_days / total_days:.1%})")
+    stats = df.agg(*agg_exprs).first().asDict()
+    total = int(stats["total"])
+
+    print("\n=== Báo cáo chất lượng dữ liệu (Pha 1) ===")
+    print(f"Tổng số giờ (sau dựng lưới đầy đủ): {total}")
+
+    for p in POLLUTANTS:
+        missing = int(stats.get(f"{p}_missing") or 0)
+        interpolated = int(stats.get(f"{p}_interpolated") or 0)
+
+        print(
+            f"  {p:<6}: thiếu={missing:>5} ({missing / total:.1%})  "
+            f"đã nội suy={interpolated:>5} ({interpolated / total:.1%})"
+        )
+
+    # Thống kê ngày trong một action riêng.
+    days = (
+        df.select("station_id", "aqi_day", "day_qc_flag")
+        .dropDuplicates(["station_id", "aqi_day"])
+    )
+
+    day_stats = (
+        days.agg(
+            F.count(F.lit(1)).alias("total_days"),
+            F.sum(
+                F.when(F.col("day_qc_flag") == "valid", 1).otherwise(0)
+            ).alias("valid_days"),
+        )
+        .first()
+        .asDict()
+    )
+
+    total_days = int(day_stats["total_days"])
+    valid_days = int(day_stats.get("valid_days") or 0)
+    ratio = valid_days / total_days if total_days else 0.0
+
+    print(
+        f"Ngày hợp lệ cho AQI ngày (>= {MIN_DAY_COMPLETENESS:.0%} dữ liệu): "
+        f"{valid_days}/{total_days} ({ratio:.1%})"
+    )
     print("=" * 43 + "\n")
-
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument(
+        "--skip-quality-report",
+        action="store_true",
+        help="Write clean parquet first and defer the quality report.",
+    )
     args = ap.parse_args()
 
     spark = (
@@ -184,21 +227,34 @@ def main():
     df = interpolate_short_gaps(df)
     df = add_day_aggregates(df)
 
-    print_quality_report(df)
-
     out_cols = (
-        ["station_id", "city", "country", "lat", "lon", "ts_utc", "ts_epoch", "dt", "aqi_day", "owm_aqi"]
+        ["station_id", "city", "country", "lat", "lon",
+         "ts_utc", "ts_epoch", "dt", "aqi_day", "owm_aqi"]
         + POLLUTANTS
         + ["pm2_5_day_avg", "pm10_day_avg", "day_qc_flag"]
         + [f"{p}_qc" for p in POLLUTANTS]
     )
+
+    # FAST PATH:
+    # Compute the expensive transformation once and materialize it directly.
+    # Do not persist/cache the full ~8.7M-row dataframe in this WSL environment.
     (
         df.select(*out_cols)
-        .coalesce(1)
+        .repartition("country", "dt")
         .write.mode("overwrite")
         .partitionBy("country", "dt")
         .parquet(args.output)
     )
+
+    print("\n=== CLEAN_WRITE_COMPLETE ===", flush=True)
+
+    # The quality report must never block creation of /clean.
+    # If requested, compute it from the already-materialized parquet.
+    if args.skip_quality_report:
+        print("=== QUALITY_REPORT_DEFERRED ===", flush=True)
+    else:
+        clean_df = spark.read.parquet(args.output)
+        print_quality_report(clean_df)
 
     spark.stop()
 

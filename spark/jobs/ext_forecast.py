@@ -63,6 +63,7 @@ os.environ["PYTHONPATH"] = _SPARK_ROOT + os.pathsep + os.environ.get("PYTHONPATH
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import RandomForestRegressor
+from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType, DoubleType
@@ -169,7 +170,7 @@ def evaluate(model, scaler, spark_df, months):
     return {"rmse": rmse, "mae": mae, "r2": r2, "n_test": len(pdf)}
 
 
-def train_random_forest(train_df, seed=42, num_trees=100, max_depth=10):
+def train_random_forest(train_df, seed=42, num_trees=20, max_depth=5):
     """Tầng 2 — train PHÂN TÁN THẬT trên toàn bộ train_df cùng lúc (không chunk theo
     tháng, không toPandas() — khác hẳn cách tầng 1 phải làm vì SGD/SVR không phân tán
     được). Đây là điểm tier 2 phải chứng minh: RandomForestRegressor tự distribute
@@ -485,7 +486,7 @@ def main():
     df = spark.read.parquet(args.input)
     if args.since:
         df = df.filter(F.col("dt") >= F.lit(args.since).cast("date"))
-    features = build_forecast_features(df).cache()
+    features = build_forecast_features(df).persist(StorageLevel.DISK_ONLY)
     print(f"Tổng số dòng có đủ feature+label: {features.count()}")
 
     train_months, test_months = time_based_split(features)

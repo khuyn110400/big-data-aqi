@@ -8,6 +8,9 @@ RUN pip install --no-cache-dir -r /app/serving/requirements.txt
 COPY serving /app/serving
 COPY collector/config/cities.json /app/collector/config/cities.json
 
+COPY data/samples /app/data/samples
+RUN mkdir -p /app/final_results/json
+
 EXPOSE 8000
 
 CMD ["uvicorn", "serving.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

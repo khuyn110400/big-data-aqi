@@ -22,6 +22,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 ROOT = Path(__file__).resolve().parents[2]
 CITIES_FILE = ROOT / "collector" / "config" / "cities.json"
+EXT_DIR = ROOT / "final_results" / "json"
+SAMPLE_DIR = ROOT / "data" / "samples"
+
+CLUSTERS_FILE = EXT_DIR / "ext_clusters.json"
+FORECAST_FILE = EXT_DIR / "ext_forecast_backtest.json"
+
+CLUSTERS_SAMPLE = SAMPLE_DIR / "ext_clusters_sample.json"
+FORECAST_SAMPLE = SAMPLE_DIR / "ext_forecast_backtest_sample.json"
 
 load_dotenv(ROOT / ".env")
 
@@ -255,6 +263,23 @@ def latest_station(station: dict) -> dict | None:
         "dominant_pollutant": decode(row.get(b"d:dom")),
     }
 
+def load_extension_json(primary: Path, sample: Path) -> dict:
+    path = primary if primary.exists() else sample
+
+    if not path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Extension data not found: {primary.name}",
+        )
+
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cannot read {path.name}",
+        ) from exc
 
 @app.get("/health")
 def health():
@@ -471,3 +496,64 @@ def aqi_ranking(
         ranking_cache[cache_key] = result
 
     return result
+
+@app.get("/ext/clusters")
+def ext_clusters(
+    month: int | None = Query(default=None, ge=1, le=12),
+    country: str | None = Query(default=None),
+):
+    data = load_extension_json(
+        CLUSTERS_FILE,
+        CLUSTERS_SAMPLE,
+    )
+
+    rows = data.get("rows", [])
+
+    if month is not None:
+        rows = [
+            row for row in rows
+            if row.get("month") == month
+        ]
+
+    if country:
+        country_norm = country.upper().strip()
+        rows = [
+            row for row in rows
+            if str(row.get("country", "")).upper()
+            == country_norm
+        ]
+
+    return {
+        **{
+            k: v
+            for k, v in data.items()
+            if k != "rows"
+        },
+        "rows": rows,
+    }
+
+@app.get("/ext/forecast")
+def ext_forecast(
+    station_id: str | None = Query(default=None),
+):
+    data = load_extension_json(
+        FORECAST_FILE,
+        FORECAST_SAMPLE,
+    )
+
+    rows = data.get("rows", [])
+
+    if station_id:
+        rows = [
+            row for row in rows
+            if row.get("station_id") == station_id
+        ]
+
+    return {
+        **{
+            k: v
+            for k, v in data.items()
+            if k != "rows"
+        },
+        "rows": rows,
+    }

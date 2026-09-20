@@ -64,6 +64,18 @@
           "value": "2026-09-18"
         },
         "hide": 0
+      },
+      {
+        "name": "cluster_month",
+        "label": "Cluster Month",
+        "type": "textbox",
+        "query": "8",
+        "current": {
+          "selected": true,
+          "text": "8",
+          "value": "8"
+        },
+        "hide": 0
       }
     ]
   },
@@ -570,6 +582,182 @@
         "legend": {
           "displayMode": "list",
           "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "AQI Clustering — Month ${cluster_month}",
+      "description": "Cluster assignment and monthly pollutant averages.",
+      "type": "table",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://serving-api:8000/ext/clusters?month=${cluster_month}",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "rows",
+          "columns": [
+            {
+              "selector": "city",
+              "text": "City",
+              "type": "string"
+            },
+            {
+              "selector": "country",
+              "text": "Country",
+              "type": "string"
+            },
+            {
+              "selector": "month",
+              "text": "Month",
+              "type": "number"
+            },
+            {
+              "selector": "avg_pm2_5",
+              "text": "Avg PM2.5",
+              "type": "number"
+            },
+            {
+              "selector": "avg_pm10",
+              "text": "Avg PM10",
+              "type": "number"
+            },
+            {
+              "selector": "avg_o3",
+              "text": "Avg O3",
+              "type": "number"
+            },
+            {
+              "selector": "avg_no2",
+              "text": "Avg NO2",
+              "type": "number"
+            },
+            {
+              "selector": "cluster",
+              "text": "Cluster",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 8,
+      "title": "AQI Forecast +24h — ${station_id}",
+      "description": "Actual AQI versus SGD, Random Forest and CNN-LSTM backtest.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aqi-fastapi"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "aqi-fastapi"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "timeseries",
+          "parser": "backend",
+          "url": "http://serving-api:8000/ext/forecast?station_id=${station_id}",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "rows",
+          "columns": [
+            {
+              "selector": "ts_utc",
+              "text": "Time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "actual",
+              "text": "Actual AQI",
+              "type": "number"
+            },
+            {
+              "selector": "sgd",
+              "text": "SGD T1",
+              "type": "number"
+            },
+            {
+              "selector": "rf",
+              "text": "Random Forest T2",
+              "type": "number"
+            },
+            {
+              "selector": "cnn_lstm",
+              "text": "CNN-LSTM T3",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "computed_columns": [],
+          "filterExpression": "",
+          "summarizeExpression": "",
+          "global_query_id": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "tooltip": {
           "mode": "multi"

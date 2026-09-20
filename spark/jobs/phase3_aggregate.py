@@ -98,8 +98,8 @@ def main():
     daily = compute_daily(df)
     ranking = compute_ranking(daily)
 
-    daily.coalesce(1).write.mode("overwrite").partitionBy("country", "dt").parquet(f"{args.output}/daily")
-    ranking.coalesce(1).write.mode("overwrite").partitionBy("dt").parquet(f"{args.output}/ranking")
+    daily.repartition(48, "country", "dt").write.mode("overwrite").partitionBy("country", "dt").parquet(f"{args.output}/daily")
+    ranking.repartition(48, "dt").write.mode("overwrite").partitionBy("dt").parquet(f"{args.output}/ranking")
 
     print_top_ranking(ranking)
 

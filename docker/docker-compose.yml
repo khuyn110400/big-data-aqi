@@ -221,6 +221,8 @@ services:
       HBASE_THRIFT_HOST: hbase-thrift
       HBASE_THRIFT_PORT: "9090"
       HBASE_TABLE: air_quality
+    volumes:
+      - ../final_results/json:/app/final_results/json:ro
     depends_on:
       hbase-thrift:
         condition: service_started

@@ -324,8 +324,9 @@ def main():
     spark.sparkContext.setLogLevel("WARN")
 
     df = spark.read.parquet(args.input)
-    features = build_city_month_features(df)
-    print(f"So dong (city x thang): {features.count()}")
+    features = build_city_month_features(df).cache()
+    n_features = features.count()
+    print(f"So dong (city x thang): {n_features}")
 
     if args.k is not None:
         # k co dinh, nguoi dung tu chon -> giu tang 1 (KMeans) don gian, khong so sanh
@@ -351,6 +352,7 @@ def main():
         payload = export_clusters_json(result, best_name, k, silhouette, args.json_out)
         print(f"Da ghi {args.json_out}: {payload['algorithm']}, {payload['n_clusters']} cum, {len(payload['rows'])} dong")
 
+    features.unpersist()
     spark.stop()
 
 
