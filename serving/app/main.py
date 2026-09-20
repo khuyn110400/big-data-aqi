@@ -7,6 +7,8 @@ Contract: CONTRACTS.md §C5.
 
 from __future__ import annotations
 
+from functools import wraps
+
 import json
 import os
 from datetime import date, datetime, time, timedelta, timezone
@@ -14,6 +16,7 @@ from pathlib import Path
 from threading import RLock
 
 import happybase
+from thriftpy2.transport.base import TTransportException
 from cachetools import TTLCache
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
@@ -64,6 +67,22 @@ pool = happybase.ConnectionPool(
 latest_cache = TTLCache(maxsize=64, ttl=60)
 ranking_cache = TTLCache(maxsize=128, ttl=60)
 cache_lock = RLock()
+
+
+def retry_hbase_transport(func):
+    """Retry once when HBase Thrift reuses a stale socket."""
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        for attempt in range(2):
+            try:
+                return func(*args, **kwargs)
+            except TTransportException:
+                if attempt == 1:
+                    raise
+        raise RuntimeError("unreachable")
+
+    return wrapped
+
 
 
 def load_stations() -> list[dict]:
@@ -176,6 +195,7 @@ def row_to_measurement(row: dict) -> dict:
     }
 
 
+@retry_hbase_transport
 def scan_station_range(
     station_id: str,
     start: datetime,
@@ -218,6 +238,7 @@ def scan_station_range(
     return rows
 
 
+@retry_hbase_transport
 def latest_station(station: dict) -> dict | None:
     station_id = station["station_id"]
 
