@@ -1,29 +1,31 @@
 """
-LÀN STREAMING — Kafka -> AQI -> HBase + HDFS. NGƯỜI B · M3
+Streaming: Kafka -> tính AQI -> HBase và HDFS.
 
-readStream(kafka air-quality-raw) -> parse schema C1 -> aqi_core (CÙNG module với Pha 2) ->
-  - HBase : bảng air_quality (row key + cột theo C4, qua sinks/hbase_sink.py)
-  - HDFS  : /air-quality/raw/ingest_mode=live/country=XX/dt=YYYY-MM-DD/ (để batch xử lý lại được)
-  - Bản ghi sai schema -> topic air-quality-dlq (không làm chết job)
+Đọc topic air-quality-raw, parse theo schema C1, tính AQI bằng aqi_core (cùng module với
+Pha 2) rồi ghi ra:
+  - HBase: bảng air_quality (row key và cột theo C4, qua sinks/hbase_sink.py)
+  - HDFS : /air-quality/raw/ingest_mode=live/country=XX/dt=YYYY-MM-DD/, để batch xử lý lại được
+Bản ghi sai schema được đẩy sang topic air-quality-dlq, không làm dừng job.
 
 Thiết kế:
-  * Khối lượng live nhỏ (~200 bản ghi mỗi 30-60 phút) nên mỗi micro-batch được gom về driver
-    (foreachBatch + collect) rồi xử lý ở đó: chỉ driver cần happybase, executor chỉ đọc Kafka.
-  * Nowcast PM2.5/PM10 cần 11 giờ trước đó của từng trạm: đọc từ HBase (sinks.hbase_sink.
-    read_pm_history) + các giờ nằm cùng batch, rồi align_hourly_window() -> nowcast() ->
-    iaqi_hour() — đúng 3 hàm mà Pha 2 gọi, không viết lại công thức.
-  * Ghi HBase theo row key nên idempotent: batch bị chạy lại sau khi restart chỉ ghi đè cùng dòng.
-    HDFS raw ghi append nên batch chạy lại có thể trùng dòng — Pha 1 đã dropDuplicates
-    (station_id, ts_epoch).
-  * Bản ghi đến muộn được ghi đúng dòng của nó nhưng các giờ SAU đó không được tính lại.
-    Không dùng watermark vì không có state/aggregation của Spark.
-  * Khác Pha 1 ở một điểm: không nội suy khoảng thiếu ngắn (không có dữ liệu tương lai);
-    Nowcast tự chịu được thiếu giờ (cần >= 2 trong 3 giờ gần nhất).
+  - Lượng dữ liệu live nhỏ (khoảng 200 bản ghi mỗi 30-60 phút) nên mỗi micro-batch được gom
+    về driver (foreachBatch + collect) rồi xử lý ở đó. Nhờ vậy chỉ driver cần happybase,
+    executor chỉ đọc Kafka.
+  - Nowcast PM2.5 và PM10 cần 11 giờ trước đó của từng trạm. Job đọc các giờ này từ HBase
+    (hbase_sink.read_pm_history) cộng với các giờ nằm cùng batch, rồi gọi align_hourly_window(),
+    nowcast() và iaqi_hour(), đúng ba hàm mà Pha 2 gọi, không viết lại công thức.
+  - Ghi HBase theo row key nên idempotent: batch chạy lại sau khi restart chỉ ghi đè cùng
+    dòng. Ghi HDFS là append nên batch chạy lại có thể trùng dòng; Pha 1 đã dropDuplicates
+    theo (station_id, ts_epoch).
+  - Bản ghi đến muộn được ghi đúng dòng của nó nhưng các giờ sau đó không được tính lại.
+    Không dùng watermark vì job không có state hay aggregation của Spark.
+  - Khác Pha 1 ở một điểm: không nội suy khoảng thiếu ngắn (chưa có dữ liệu tương lai).
+    Nowcast tự chịu được việc thiếu giờ, chỉ cần ít nhất 2 trong 3 giờ gần nhất.
 
-Chạy (trong container spark-master, xem docs/B_TO_A_RUNBOOK.md):
+Chạy (trong container spark-master, xem docs/huong-dan-chay.md):
   spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:<đúng bản Spark> \\
       spark/jobs/streaming_aqi.py --starting-offsets earliest --once
---once: xử lý hết dữ liệu đang có trong Kafka rồi thoát (dùng để kiểm thử); bỏ --once để chạy liên tục.
+--once xử lý hết dữ liệu đang có trong Kafka rồi thoát (dùng để kiểm thử); bỏ --once để chạy liên tục.
 """
 from __future__ import annotations
 
@@ -79,7 +81,7 @@ def parse_record(raw: str) -> dict:
 
 
 def clean_components(components: dict, limits: dict) -> dict:
-    """Âm hoặc vượt trần vật lý -> None cho ĐÚNG chất đó (giống clip_outliers của Pha 1)."""
+    """Nồng độ âm hoặc vượt trần vật lý thì đặt None cho đúng chất đó (giống clip_outliers của Pha 1)."""
     cleaned = {}
     for pollutant in POLLUTANTS:
         value = components.get(pollutant)

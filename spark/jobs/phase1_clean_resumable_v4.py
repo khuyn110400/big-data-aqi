@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Phase 1 clean - resumable / bounded-window version.
+Pha 1 (làm sạch) bản chịu lỗi: chạy theo từng giai đoạn, có thể chạy tiếp khi bị ngắt.
 
-Stages are intentionally separate Spark jobs:
-  grid        raw -> clipped hourly grid checkpoint
-  interpolate grid -> bounded-window interpolation checkpoint
-  final       interpolation checkpoint -> daily aggregates -> clean parquet
-  quality     read materialized clean parquet -> quality report
-
-This preserves the existing cleaning semantics while making completed stages reusable.
+Đây là bản dùng để chạy trên toàn bộ ~8,7 triệu bản ghi. Ngữ nghĩa làm sạch giống phase1_clean.py
+(cùng cách loại ngoại lai, cùng luật nội suy tối đa 3 giờ), nhưng tách thành các job Spark riêng
+để giai đoạn nào xong rồi thì dùng lại được:
+  grid         raw -> lưới giờ liên tục đã loại ngoại lai (checkpoint)
+  interpolate  lưới giờ -> nội suy khoảng thiếu trong cửa sổ giới hạn (checkpoint)
+  final        kết quả nội suy -> tổng hợp theo ngày -> parquet clean
+  quality      đọc parquet clean đã ghi -> báo cáo chất lượng
 """
 import argparse
 import os
@@ -98,12 +98,12 @@ def build_hourly_grid(df):
 
 def interpolate_short_gaps_bounded(df):
     """
-    Same interpolation decision as the existing Phase 1, but bounded and
-    computed in one Window pass for all pollutants.
+    Cùng quyết định nội suy như phase1_clean.py nhưng dùng cửa sổ giới hạn và tính cho mọi
+    chất trong một lần chạy Window.
 
-    Because the dataframe is already an hourly grid and the accepted endpoint
-    span is <= MAX_GAP_HOURS_TO_INTERPOLATE, no lookup outside +/- N rows can
-    ever affect a row that is eligible for interpolation.
+    Dữ liệu đã là lưới giờ liên tục và khoảng cách giữa hai điểm đầu mút được nội suy không
+    vượt quá MAX_GAP_HOURS_TO_INTERPOLATE, nên các dòng nằm ngoài +/- N dòng không bao giờ
+    ảnh hưởng tới dòng đủ điều kiện nội suy.
     """
     n = MAX_GAP_HOURS_TO_INTERPOLATE
     w = Window.partitionBy("station_id").orderBy("ts_epoch")
@@ -132,9 +132,8 @@ def interpolate_short_gaps_bounded(df):
             ).over(w_next).alias(f"__{p}_next_val"),
         ])
 
-    # All 24 endpoint expressions share the same station/time ordering.
-    # Building them together lets Spark plan one Window operator instead of a
-    # long chain of withColumn/window transformations.
+    # 24 biểu thức điểm đầu mút cùng dùng một thứ tự trạm/thời gian. Gộp chúng lại để Spark
+    # lập kế hoạch một toán tử Window thay vì một chuỗi dài withColumn/window.
     df = df.select("*", *helper_exprs)
 
     projected = []
@@ -185,8 +184,8 @@ def interpolate_short_gaps_bounded(df):
 
 def add_day_aggregates_window(df):
     """
-    Equivalent output to groupBy + join, but avoids materializing a separate
-    aggregate dataframe and joining it back to every hourly row.
+    Cho kết quả tương đương groupBy rồi join, nhưng không tạo dataframe tổng hợp riêng
+    và không phải join ngược lại vào từng dòng theo giờ.
     """
     df = df.withColumn(
         "ts_utc",

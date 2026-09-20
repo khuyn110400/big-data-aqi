@@ -1,14 +1,14 @@
 """
-Ghi/đọc bảng HBase `air_quality` theo C4 (CONTRACTS.md). NGƯỜI B · M3
+Ghi và đọc bảng HBase `air_quality` theo C4 (CONTRACTS.md).
 
-MỘT nơi duy nhất định nghĩa row key + ánh xạ cột, dùng chung cho
+Đây là nơi duy nhất định nghĩa row key và ánh xạ cột, dùng chung cho
   - load_history_to_hbase.py  (nạp lịch sử từ parquet Pha 2)
-  - streaming_aqi.py          (làn live)
+  - streaming_aqi.py          (làn streaming)
 để hai đường ghi không thể lệch nhau. FastAPI (serving/app/main.py) đọc đúng định dạng này:
   row key = {station_id}#{9999999999 - ts_epoch:010d}, giá trị là chuỗi UTF-8.
 
-Không import pyspark/happybase ở mức module: test chạy không cần HBase, và worker Spark
-chỉ cần happybase khi thật sự mở kết nối.
+Module không import pyspark hay happybase ở mức module, để test chạy được mà không cần
+HBase và worker Spark chỉ cần happybase khi thật sự mở kết nối.
 """
 from __future__ import annotations
 
@@ -62,11 +62,11 @@ def key_range(station_id: str, start_epoch: int, end_epoch: int) -> tuple[bytes,
 
 
 def epoch_of(record: dict) -> int:
-    """ts_epoch nếu có; nếu không thì suy từ ts_utc.
+    """Lấy ts_epoch nếu có, không thì suy từ ts_utc.
 
-    ts_utc dạng chuỗi ISO là UTC theo hợp đồng C1. Từ chối datetime NAIVE: PySpark trả
-    TimestampType thành datetime naive theo múi giờ MÁY, không phải UTC — đoán UTC sẽ lệch
-    giờ âm thầm. Với dữ liệu Spark hãy truyền ts_epoch (cast("long"))."""
+    ts_utc dạng chuỗi ISO được coi là UTC theo hợp đồng C1. Datetime không kèm múi giờ bị từ
+    chối: PySpark trả TimestampType về datetime theo múi giờ của máy chứ không phải UTC, đoán
+    là UTC sẽ lệch giờ mà không báo lỗi. Với dữ liệu từ Spark, hãy truyền ts_epoch (cast("long"))."""
     if record.get("ts_epoch") is not None:
         return int(record["ts_epoch"])
 
@@ -101,8 +101,8 @@ def _to_float(value: Optional[bytes]) -> Optional[float]:
 
 
 def is_writable(record: dict) -> bool:
-    """Bản ghi không có AQI (thiếu hết dữ liệu) thì không ghi: FastAPI /aqi/latest lấy dòng
-    mới nhất theo prefix, dòng rỗng sẽ che mất dòng có số."""
+    """Chỉ ghi bản ghi có AQI. FastAPI /aqi/latest lấy dòng mới nhất theo prefix, nên một
+    dòng rỗng sẽ che mất dòng có số."""
     return _fmt(record.get("aqi")) is not None
 
 

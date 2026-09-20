@@ -1,24 +1,24 @@
 """
-PHA 1 — LÀM SẠCH  (El Fazziki 2015, pha 1). NGƯỜI B · M1
+Pha 1: làm sạch dữ liệu (giai đoạn 1 trong mô hình của El Fazziki et al., 2015).
 
 Mapper : key = (station_id, ts_utc), value = bản ghi thô
 Reducer: khử trùng lặp, loại ngoại lai, nội suy điểm thiếu
 
-Input : hdfs:///air-quality/raw/**/*.jsonl.gz   (hoặc data/samples/ khi dev local)
-Output: hdfs:///air-quality/clean/  parquet, partition country/dt
+Đầu vào : hdfs:///air-quality/raw/**/*.jsonl.gz  (hoặc data/samples/ khi chạy local)
+Đầu ra  : hdfs:///air-quality/clean/  (parquet, phân vùng country/dt)
 
 Chạy local không cần cluster:
   python jobs/phase1_clean.py --input ../data/samples/air_quality_sample.jsonl --output /tmp/clean
 
-Rule gap (xem data/samples/README.md, đã kiểm chứng trên dữ liệu thật):
-  - Thiếu <= 3 giờ liên tiếp -> nội suy tuyến tính theo trạm.
-  - Thiếu > 3 giờ (khối nguyên ngày) -> KHÔNG nội suy, giữ null, đánh qc_flag
-    "missing" để Pha 2/3 loại ngày đó khỏi AQI ngày.
+Quy tắc xử lý khoảng thiếu (đã kiểm chứng trên dữ liệu thật, xem data/samples/README.md):
+  - Thiếu tối đa 3 giờ liên tiếp: nội suy tuyến tính theo từng trạm.
+  - Thiếu hơn 3 giờ (thường mất cả ngày): không nội suy, giữ null và đánh dấu "missing"
+    để Pha 2 và Pha 3 loại ngày đó khỏi AQI ngày.
 
-Ngày AQI theo QĐ 1459 (mục 2.2.2a) là khối 01:00 -> 00:00 hôm sau, KHÁC với
-ngày dương lịch 00:00->23:00 dùng để partition output — vì vậy có 2 cột ngày
-riêng: 'dt' (ngày UTC, dùng để partition theo C2) và 'aqi_day' (dùng để tính
-TB24h PM2.5/PM10 và tỉ lệ đầy đủ dữ liệu theo đúng định nghĩa QĐ 1459).
+Ngày AQI theo QĐ 1459 (mục 2.2.2a) là khối 01:00 đến 00:00 hôm sau, khác với ngày dương
+lịch 00:00-23:00 dùng để phân vùng đầu ra. Vì vậy có hai cột ngày: dt (ngày UTC, dùng để
+phân vùng theo C2) và aqi_day (dùng để tính trung bình 24 giờ của PM2.5, PM10 và tỉ lệ đủ
+dữ liệu theo đúng định nghĩa của QĐ 1459).
 """
 import argparse
 import os
@@ -62,14 +62,14 @@ def _max_plausible() -> dict:
 
 def load_raw(spark: SparkSession, path: str):
     df = spark.read.schema(RAW_SCHEMA).json(path)
-    # owm_aqi giữ lại (không dùng để làm sạch) để Pha 2 đối chiếu với AQI tự tính — yêu cầu M2.
+    # Giữ owm_aqi (không dùng để làm sạch) để Pha 2 đối chiếu với AQI tự tính.
     cols = ["station_id", "city", "country", "lat", "lon", "ts_epoch", "owm_aqi"]
     cols += [F.col(f"components.{p}").alias(p) for p in POLLUTANTS]
     return df.select(*cols).dropDuplicates(["station_id", "ts_epoch"])
 
 
 def clip_outliers(df):
-    """Nồng độ âm hoặc vượt trần vật lý -> null cho ĐÚNG cột đó, không drop cả dòng."""
+    """Nồng độ âm hoặc vượt trần vật lý thì đặt null cho đúng cột đó, không bỏ cả dòng."""
     max_plausible = _max_plausible()
     for p in POLLUTANTS:
         df = df.withColumn(
@@ -80,7 +80,7 @@ def clip_outliers(df):
 
 
 def build_hourly_grid(df):
-    """Dựng lưới giờ liên tục mỗi trạm để lộ ra giờ thiếu HẲN (không chỉ giờ có mặt trong input)."""
+    """Dựng lưới giờ liên tục cho mỗi trạm để thấy cả những giờ mất hẳn bản ghi (không chỉ các giờ có trong đầu vào)."""
     meta = df.groupBy("station_id").agg(
         F.first("city").alias("city"),
         F.first("country").alias("country"),
@@ -125,7 +125,7 @@ def interpolate_short_gaps(df):
 
 
 def add_day_aggregates(df):
-    """TB24h PM2.5/PM10 + tỉ lệ đầy đủ theo 'ngày AQI' (01:00 -> 00:00 hôm sau, QĐ 1459 mục 2.2.2a)."""
+    """Trung bình 24 giờ của PM2.5, PM10 và tỉ lệ đủ dữ liệu theo 'ngày AQI' (01:00 đến 00:00 hôm sau, QĐ 1459, mục 2.2.2a)."""
     df = df.withColumn("ts_utc", F.to_timestamp(F.from_unixtime(F.col("ts_epoch"))))
     df = df.withColumn("dt", F.to_date("ts_utc"))
     df = df.withColumn("aqi_day", F.to_date(F.col("ts_utc") - F.expr("INTERVAL 1 HOUR")))
@@ -213,9 +213,9 @@ def main():
     spark = (
         SparkSession.builder.appName("phase1_clean")
         .master(os.environ.get("SPARK_MASTER", "local[*]"))
-        # BẮT BUỘC: to_date()/from_unixtime() quy đổi theo timezone của session (mặc định
-        # theo máy chạy job), không phải UTC -> dt/aqi_day sẽ lệch ngày nếu không set (đã
-        # phát hiện qua test: máy dev ở +07 làm sai lệch ranh giới ngày UTC yêu cầu ở C1).
+        # Đặt múi giờ UTC: to_date() và from_unixtime() đổi theo múi giờ của session (mặc định
+        # là múi giờ máy chạy job), nếu không đặt thì dt và aqi_day bị lệch ngày. Đã gặp lỗi
+        # này trên máy dev ở múi giờ +07.
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
     )
@@ -235,9 +235,8 @@ def main():
         + [f"{p}_qc" for p in POLLUTANTS]
     )
 
-    # FAST PATH:
-    # Compute the expensive transformation once and materialize it directly.
-    # Do not persist/cache the full ~8.7M-row dataframe in this WSL environment.
+    # Tính phép biến đổi nặng đúng một lần và ghi thẳng ra parquet. Không cache toàn bộ
+    # dataframe ~8,7 triệu dòng vì môi trường WSL không đủ bộ nhớ.
     (
         df.select(*out_cols)
         .repartition("country", "dt")
@@ -248,8 +247,8 @@ def main():
 
     print("\n=== CLEAN_WRITE_COMPLETE ===", flush=True)
 
-    # The quality report must never block creation of /clean.
-    # If requested, compute it from the already-materialized parquet.
+    # Báo cáo chất lượng không được chặn việc tạo /clean: nếu không bị bỏ qua thì tính từ
+    # parquet đã ghi xong.
     if args.skip_quality_report:
         print("=== QUALITY_REPORT_DEFERRED ===", flush=True)
     else:

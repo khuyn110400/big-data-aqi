@@ -1,25 +1,23 @@
 """
-PHA 2 — TÍNH AQI  (El Fazziki 2015, pha 2). NGƯỜI B · M2
-*** ĐÂY LÀ TRÁI TIM CỦA ĐỒ ÁN ***
+Pha 2: tính AQI theo giờ cho từng trạm (giai đoạn 2 trong mô hình của El Fazziki et al., 2015).
 
-Mapper : với mỗi bản ghi (station_id, ts_utc), tính Nowcast 12h cho PM2.5/PM10
-         rồi gọi aqi_core.iaqi_hour() -> IAQI từng chất
-Reducer: aqi_core.iaqi_hour() đã tự làm — AQI = max(IAQI); gán aqi_level,
-         aqi_label, dominant_pollutant (không viết lại công thức ở đây)
+Mapper : với mỗi bản ghi (station_id, ts_utc), tính Nowcast 12 giờ cho PM2.5 và PM10,
+         rồi gọi aqi_core.iaqi_hour() để có IAQI của từng chất.
+Reducer: AQI = max(IAQI), gán aqi_level, aqi_label và dominant_pollutant. Phần này nằm
+         sẵn trong aqi_core.iaqi_hour(), Pha 2 không tính lại công thức.
 
-Input : /air-quality/clean/   (output Pha 1)   Output: /air-quality/aqi/  (schema C3)
+Đầu vào : /air-quality/clean/  (đầu ra Pha 1)
+Đầu ra  : /air-quality/aqi/    (schema C3)
 
 Chạy local không cần cluster:
   python jobs/phase2_aqi.py --input /tmp/clean --output /tmp/aqi
 
-Nowcast (12h) chỉ tính được ở đây, KHÔNG phải Pha 1 — vì Pha 1 chỉ có nhiệm vụ
-làm sạch, còn Nowcast là một phần của công thức AQI GIỜ (QĐ 1459 mục 2.2.1a),
-thuộc trách nhiệm Pha 2 theo đúng cách chia Mapper/Reducer.
+Nowcast được tính ở Pha 2 chứ không phải Pha 1, vì nó là một phần của công thức AQI giờ
+(QĐ 1459, mục 2.2.1a), còn Pha 1 chỉ làm sạch dữ liệu.
 
-owm_aqi được Pha 1 giữ lại (không phải phần của C3) chỉ để đối chiếu ở đây —
-KHÔNG ghi owm_aqi vào output /air-quality/aqi/ vì C3 trong CONTRACTS.md không
-có cột này (đổi schema dùng chung phải sửa CONTRACTS.md + báo Người A trước).
-Bảng đối chiếu in ra console + ghi riêng vào docs/ cho báo cáo.
+Pha 1 giữ lại cột owm_aqi chỉ để đối chiếu ở bước này. Cột đó không có trong schema C3
+nên không ghi vào đầu ra; bảng đối chiếu được in ra console và có thể ghi ra CSV bằng
+--comparison-output. Muốn thêm cột vào schema dùng chung thì phải sửa CONTRACTS.md trước.
 """
 import argparse
 import os
@@ -27,10 +25,10 @@ import sys
 from pathlib import Path
 
 _SPARK_ROOT = str(Path(__file__).resolve().parent.parent)
-sys.path.insert(0, _SPARK_ROOT)  # để driver `import aqi_core` được dù gọi trực tiếp
-# UDF chạy trong tiến trình worker RIÊNG (kể cả local[*]) -> không kế thừa sys.path đã sửa
-# trong bộ nhớ của driver, chỉ kế thừa biến môi trường. Không set PYTHONPATH thì worker
-# unpickle UDF sẽ lỗi "ModuleNotFoundError: No module named 'aqi_core'".
+sys.path.insert(0, _SPARK_ROOT)  # để driver import được aqi_core dù chạy trực tiếp file này
+# UDF chạy trong tiến trình Python worker riêng (kể cả với local[*]). Worker không kế thừa
+# sys.path đã sửa trong driver mà chỉ kế thừa biến môi trường; nếu không đặt PYTHONPATH,
+# worker sẽ báo "ModuleNotFoundError: No module named 'aqi_core'" khi giải nén UDF.
 os.environ["PYTHONPATH"] = _SPARK_ROOT + os.pathsep + os.environ.get("PYTHONPATH", "")
 
 from pyspark.sql import SparkSession, Window
@@ -58,9 +56,8 @@ _HOUR_RESULT_SCHEMA = StructType([
 
 @F.udf(returnType=DoubleType())
 def _nowcast_udf(current_ts, window_rows):
-    """Ghép 12 điểm trong window thành đúng vị trí giờ (aqi_core.align_hourly_window(),
-    DÙNG CHUNG với streaming_aqi.py) rồi gọi aqi_core.nowcast() thật — không viết lại
-    công thức Nowcast ở đây."""
+    """Xếp 12 điểm trong window vào đúng vị trí giờ bằng aqi_core.align_hourly_window()
+    (streaming_aqi.py dùng chung hàm này), rồi gọi aqi_core.nowcast()."""
     if window_rows is None:
         return None
     hourly = align_hourly_window(
@@ -71,7 +68,7 @@ def _nowcast_udf(current_ts, window_rows):
 
 @F.udf(returnType=_HOUR_RESULT_SCHEMA)
 def _iaqi_hour_udf(o3, no2, so2, co, pm2_5_nowcast, pm10_nowcast):
-    """Gọi thẳng aqi_core.iaqi_hour() — QUY TẮC VÀNG: không copy công thức."""
+    """Gọi aqi_core.iaqi_hour(), không tính lại công thức ở đây."""
     out = iaqi_hour({
         "o3": o3, "no2": no2, "so2": so2, "co": co,
         "pm2_5": pm2_5_nowcast, "pm10": pm10_nowcast,
@@ -79,8 +76,8 @@ def _iaqi_hour_udf(o3, no2, so2, co, pm2_5_nowcast, pm10_nowcast):
     isubs = out["iaqi"]
 
     def _f(x):
-        # round() trả int, còn schema khai DoubleType -> ép kiểu tường minh,
-        # nếu không PySpark UDF (non-Arrow) serialize sai kiểu thành null âm thầm.
+        # round() trả int nhưng schema khai DoubleType. Phải ép kiểu tường minh, nếu không
+        # UDF thường của PySpark (không dùng Arrow) sẽ âm thầm cho ra null.
         return float(x) if x is not None else None
 
     return (
@@ -94,7 +91,7 @@ def _iaqi_hour_udf(o3, no2, so2, co, pm2_5_nowcast, pm10_nowcast):
 
 
 def add_nowcast(df, pollutant: str):
-    """Nowcast(12h) cho pm2_5/pm10 — chỉ đúng cho 2 chất này (QĐ 1459 mục 2.2.1a)."""
+    """Nowcast 12 giờ cho pm2_5 và pm10. Chỉ áp dụng cho hai chất này (QĐ 1459, mục 2.2.1a)."""
     w = Window.partitionBy("station_id").orderBy("ts_epoch").rowsBetween(-(NOWCAST_WINDOW_HOURS - 1), 0)
     packed = F.collect_list(F.struct(F.col("ts_epoch").alias("ts_epoch"), F.col(pollutant).alias("v"))).over(w)
     return df.withColumn(f"{pollutant}_nowcast", _nowcast_udf(F.col("ts_epoch"), packed))
@@ -112,8 +109,8 @@ def compute_iaqi_hour(df):
 
 
 def print_owm_comparison(df):
-    """Bảng đối chiếu aqi tự tính (VN_AQI 0-500) vs owm_aqi (thang 1-5 của OpenWeather).
-    CHỈ để báo cáo — owm_aqi không bao giờ được coi là AQI của đồ án (xem README §1)."""
+    """Bảng đối chiếu AQI tự tính (VN_AQI, 0-500) với owm_aqi (thang 1-5 của OpenWeather).
+    Chỉ dùng cho báo cáo; owm_aqi không phải AQI của đồ án."""
     total = df.filter(F.col("aqi").isNotNull() & F.col("owm_aqi").isNotNull()).count()
     print("\n=== Đối chiếu AQI tự tính vs owm_aqi (OpenWeather, thang 1-5) ===")
     print(f"Số bản ghi có cả 2 giá trị: {total}")

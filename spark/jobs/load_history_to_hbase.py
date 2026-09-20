@@ -1,20 +1,20 @@
 """
-NẠP LỊCH SỬ — parquet Pha 2 (/air-quality/aqi/) -> HBase air_quality. NGƯỜI B · M3
+Nạp lịch sử: đọc parquet Pha 2 (/air-quality/aqi/) và ghi vào bảng HBase air_quality.
 
-FastAPI/Grafana chỉ đọc HBase, mà làn streaming chỉ sinh dữ liệu mới từ lúc bật. Job này nạp
-kết quả batch (Pha 2) vào HBase để dashboard có lịch sử. Row key + 16 cột do
-sinks/hbase_sink.py định nghĩa, dùng chung với streaming_aqi.py.
+FastAPI và Grafana chỉ đọc HBase, trong khi làn streaming chỉ sinh dữ liệu mới kể từ lúc bật.
+Job này nạp kết quả batch (Pha 2) vào HBase để dashboard có dữ liệu lịch sử. Row key và 16 cột
+do sinks/hbase_sink.py định nghĩa, dùng chung với streaming_aqi.py.
 
-NẠP LỊCH SỬ TRƯỚC, BẬT STREAMING SAU: streaming lấy 11 giờ trước đó của từng trạm từ HBase
-để tính Nowcast PM2.5/PM10; HBase trống thì giờ live đầu tiên thiếu cửa sổ.
+Nên nạp lịch sử trước rồi mới bật streaming: streaming lấy 11 giờ trước đó của từng trạm từ
+HBase để tính Nowcast PM2.5 và PM10, nếu HBase trống thì giờ live đầu tiên thiếu cửa sổ.
 
-Chỉ nạp dòng có AQI. Nên dùng --since (vd 90 ngày gần nhất) cho dashboard; nạp toàn bộ ~8,5
-triệu dòng qua Thrift chạy lâu và không cần thiết.
+Chỉ nạp các dòng có AQI. Với dashboard nên dùng --since (ví dụ 90 ngày gần nhất); nạp toàn
+bộ ~8,5 triệu dòng qua Thrift chạy lâu và không cần thiết.
 
-Chạy trong container spark-master (xem docs/B_TO_A_RUNBOOK.md):
+Chạy trong container spark-master (xem docs/huong-dan-chay.md):
   spark-submit --master local[*] spark/jobs/load_history_to_hbase.py \\
       --input hdfs://namenode:9000/air-quality/aqi --since 2026-06-01 --hbase-host hbase-thrift
-Thử không ghi gì (chỉ đếm + in mẫu): thêm --dry-run
+Thêm --dry-run để chỉ đếm và in mẫu, không ghi gì.
 """
 from __future__ import annotations
 

@@ -1,28 +1,27 @@
 """
-PHA 3 — TỔNG HỢP & XẾP HẠNG  (mẫu 3 job của Iris-pot/AQI_analysis). NGƯỜI B · M3
+Pha 3: tổng hợp theo ngày và xếp hạng thành phố (theo mô hình 3 job của Iris-pot/AQI_analysis).
 
-Input : /air-quality/aqi/    (output Pha 2, schema C3)
-Output: /air-quality/agg/daily/    — trung bình/max AQI + phân bố 6 mức theo (city, dt)
-        /air-quality/agg/ranking/ — xếp hạng thành phố theo avg_aqi trong ngày (C5 /aqi/ranking)
+Đầu vào : /air-quality/aqi/  (đầu ra Pha 2, schema C3)
+Đầu ra  : /air-quality/agg/daily/    AQI trung bình, lớn nhất, nhỏ nhất và số giờ ở từng
+                                     mức, theo (city, dt)
+          /air-quality/agg/ranking/  xếp hạng thành phố theo avg_aqi trong ngày
 
 Chạy local không cần cluster:
   python jobs/phase3_aggregate.py --input /tmp/aqi --output /tmp/agg
 
-Quyết định thiết kế (đã chốt, ghi lại để khỏi phải hỏi lại):
-  - "Điểm tổng hợp" xếp hạng = avg_aqi trong ngày. KHÔNG dùng composite score có
-    trọng số tự chọn — QĐ 1459 không định nghĩa cách xếp hạng thành phố, tự bịa
-    công thức sẽ không giải thích được nguồn gốc khi bảo vệ đồ án.
-  - Rank 1 = ô nhiễm NHẤT (avg_aqi cao nhất) trong ngày, giống kiểu dashboard AQI
-    công khai (IQAir...).
-  - AQIClassify (phân bố 6 mức) GỘP vào agg/daily/ làm cột đếm thêm (count_level_1..6),
-    KHÔNG tách folder riêng — giữ đúng 2 đường dẫn đã chốt ở C2 (CONTRACTS.md), khỏi
-    phải sửa contract chung / báo Người A.
-  - Rank tính TOÀN CỤC theo dt (không tách riêng theo từng country). Nếu Query/API
-    Bridge cần rank riêng theo country khi filter, Người A tự re-rank ở tầng API.
+Các quyết định thiết kế:
+  - Điểm để xếp hạng là avg_aqi trong ngày. Không dùng điểm tổng hợp có trọng số tự đặt,
+    vì QĐ 1459 không định nghĩa cách xếp hạng thành phố.
+  - Hạng 1 là thành phố ô nhiễm nhất (avg_aqi cao nhất) trong ngày, giống các dashboard
+    AQI công khai.
+  - Số giờ ở từng mức (6 mức) được gộp vào agg/daily/ thành các cột count_level_1..6 thay
+    vì tách thư mục riêng, để giữ đúng hai đường dẫn đã ghi ở C2 (CONTRACTS.md).
+  - Hạng được tính chung cho mọi quốc gia trong cùng một ngày dt. Muốn xếp hạng riêng theo
+    quốc gia thì xếp lại ở tầng API.
 
-worst_pollutant = dominant_pollutant xuất hiện NHIỀU GIỜ NHẤT trong ngày đó của thành
-phố (mode) — dominant_pollutant đã được Pha 2 tính đúng theo từng giờ (chất có IAQI cao
-nhất giờ đó), lấy mode tránh phải tính lại IAQI trung bình ngày cho từng chất ở đây.
+worst_pollutant là dominant_pollutant xuất hiện nhiều giờ nhất trong ngày của thành phố
+(mode). Pha 2 đã tính dominant_pollutant theo từng giờ; lấy mode để khỏi phải tính lại IAQI
+trung bình ngày cho từng chất ở đây.
 """
 import argparse
 import os
@@ -35,7 +34,7 @@ GROUP_COLS = ["city", "country", "dt"]
 
 
 def _mode_dominant_pollutant(df, group_cols):
-    """Chất xuất hiện làm dominant_pollutant nhiều giờ nhất trong nhóm -> 'worst_pollutant'."""
+    """Chất xuất hiện làm dominant_pollutant nhiều giờ nhất trong nhóm, đặt tên là worst_pollutant."""
     counts = (
         df.filter(F.col("dominant_pollutant").isNotNull())
         .groupBy(*group_cols, "dominant_pollutant")
@@ -50,7 +49,7 @@ def _mode_dominant_pollutant(df, group_cols):
 
 
 def compute_daily(df):
-    """AQI + AQIClassify gộp: trung bình/max/min AQI + đếm phân bố 6 mức theo (city, dt)."""
+    """Trung bình, lớn nhất, nhỏ nhất của AQI và số giờ ở từng mức (count_level_1..6) theo (city, dt)."""
     level_counts = [
         F.count(F.when(F.col("aqi_level") == lvl, 1)).alias(f"count_level_{lvl}") for lvl in AQI_LEVELS
     ]
@@ -66,7 +65,7 @@ def compute_daily(df):
 
 
 def compute_ranking(daily_df):
-    """Xếp hạng thành phố theo avg_aqi trong ngày — rank 1 = ô nhiễm nhất (toàn cục theo dt)."""
+    """Xếp hạng thành phố theo avg_aqi trong ngày: hạng 1 là ô nhiễm nhất, xếp chung theo dt."""
     w = Window.partitionBy("dt").orderBy(F.col("avg_aqi").desc())
     return (
         daily_df.withColumn("rank", F.row_number().over(w))
