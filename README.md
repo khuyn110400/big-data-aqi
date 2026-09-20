@@ -1,563 +1,357 @@
-# AQI Analytics — Phân tích chất lượng không khí trên nền tảng Big Data
+# AQI Analytics: phân tích chất lượng không khí trên nền tảng Big Data
 
-Đồ án môn Big Data · Kế thừa kiến trúc multi-phase MapReduce từ El Fazziki et al. (2015)
-Nguồn dữ liệu: **OpenWeather Air Pollution API** (hiện tại + lịch sử từ 27/11/2020)
+Đồ án môn Big Data. Hệ thống thu thập số liệu ô nhiễm không khí của 200 điểm trên thế giới,
+tính chỉ số AQI theo chuẩn Việt Nam bằng pipeline Spark nhiều pha (kế thừa mô hình
+multi-phase MapReduce của El Fazziki et al., 2015), lưu vào HBase và hiển thị trên Grafana.
+
+Nguồn dữ liệu: OpenWeather Air Pollution API (số liệu hiện tại và lịch sử từ 27/11/2020).
 
 ## Mục lục
 
 1. [Hệ thống làm gì](#1-hệ-thống-làm-gì)
-2. [Kiến trúc — hai làn, một lõi](#2-kiến-trúc--hai-làn-một-lõi)
-3. [Ánh xạ Mapper / Reducer](#3-ánh-xạ-mapper--reducer-kế-thừa-el-fazziki-2015)
-4. [Hai thứ tự đừng nhầm lẫn](#4-hai-thứ-tự-đừng-nhầm-lẫn)
-5. [Bản đồ repo](#5-bản-đồ-repo)
-6. [Giải thích từng phần](#6-giải-thích-từng-phần)
-7. [Ai chờ ai](#7-ai-chờ-ai)
-8. [Nếu chuyển Pha 1 sang Người A](#8-nếu-chuyển-pha-1-làm-sạch-sang-người-a)
-9. [Bắt đầu](#9-bắt-đầu)
-10. [Môi trường](#10-môi-trường)
+2. [Kiến trúc](#2-kiến-trúc)
+3. [Ánh xạ Mapper / Reducer](#3-ánh-xạ-mapper--reducer)
+4. [Cấu trúc thư mục](#4-cấu-trúc-thư-mục)
+5. [Các thành phần chính](#5-các-thành-phần-chính)
+6. [Kết quả chính](#6-kết-quả-chính)
+7. [Chạy thử](#7-chạy-thử)
+8. [Máy nào chạy được phần nào](#8-máy-nào-chạy-được-phần-nào)
+9. [Tài liệu khác](#9-tài-liệu-khác)
 
 ---
 
 ## 1. Hệ thống làm gì
 
-Thu thập nồng độ các chất ô nhiễm (PM2.5, PM10, O₃, NO₂, SO₂, CO) tại nhiều thành phố,
-tính **chỉ số AQI theo chuẩn Việt Nam (QĐ 1459/QĐ-TCMT)** bằng pipeline Spark nhiều pha,
-lưu trữ phân tán và trực quan hóa trên dashboard.
+Thu thập nồng độ sáu chất ô nhiễm (PM2.5, PM10, O₃, NO₂, SO₂, CO) tại nhiều thành phố, tính chỉ số
+AQI theo Quyết định 1459/QĐ-TCMT của Việt Nam bằng Spark, lưu trữ phân tán trên HDFS và HBase,
+rồi trực quan hoá trên Grafana.
 
-> **Điểm cần hiểu rõ:** OpenWeather trả sẵn một trường `main.aqi` nhưng đó là thang **1–5 riêng của họ**,
-> không phải AQI 0–500 của Việt Nam. Phần tính AQI từ nồng độ theo bảng breakpoint chính là
-> **đóng góp thuật toán của đồ án** — nằm ở Pha 2, tuyệt đối không được thay bằng `owm_aqi`.
+OpenWeather có trả sẵn trường `main.aqi`, nhưng đó là thang 1–5 riêng của họ, không phải AQI 0–500
+của Việt Nam. Việc tính AQI từ nồng độ theo bảng breakpoint của QĐ 1459 (Pha 2) là phần tính toán
+của đồ án, vì vậy `owm_aqi` chỉ được giữ lại để đối chiếu, không dùng làm kết quả.
 
-## 2. Kiến trúc — hai làn, một lõi
+Ngoài ba pha chính còn có hai nhánh mở rộng: phân cụm vùng theo mức ô nhiễm (5 thuật toán) và dự báo
+AQI sau 24 giờ (3 mô hình theo độ phức tạp tăng dần).
+
+## 2. Kiến trúc
+
+Hệ thống theo Lambda Architecture: một làn batch xử lý lịch sử, một làn streaming xử lý dữ liệu mới,
+và một lớp serving phục vụ dashboard. Hai làn dùng chung một module tính AQI (`spark/aqi_core`).
 
 ```
-                     ┌──────────────────────────────────────────┐
-                     │        OpenWeather Air Pollution API     │
-                     └───────────────┬──────────────────────────┘
-                                     │
-         ┌───────────────────────────┴────────────────────────────┐
-         │ LÀN BATCH (lịch sử)                LÀN STREAM (hiện tại)│
-         ▼                                                        ▼
-  backfill_history.py                                      live_poller.py
-  (200 điểm × 3–5 năm                                      (mỗi 30–60 phút)
-   ≈ 8.7 triệu bản ghi)                                           │
-         │                                                        ▼
-         ▼                                                 ┌─────────────┐
-  HDFS /air-quality/raw/ ◀──────────────────────────────── │    Kafka    │
-         │                                                 │air-quality- │
-         │                                                 │    raw      │
-         ▼                                                 └──────┬──────┘
-  ┌──────────────────┐                                            │
-  │ PHA 1  Làm sạch  │                                            ▼
-  │ Spark batch      │                                  ┌────────────────────┐
-  └────────┬─────────┘                                  │ Spark Structured   │
-           ▼                                            │ Streaming          │
-  ┌──────────────────┐        ╔═══════════════╗         └─────────┬──────────┘
-  │ PHA 2  Tính AQI  │◀──────▶║   aqi_core    ║◀──────────────────┘
-  │ M: IAQI mỗi chất │        ║  LÕI DÙNG CHUNG║
-  │ R: max → AQI     │        ║ breakpoint VN  ║   ← chỉ một implementation,
-  └────────┬─────────┘        ╚═══════════════╝      cả 2 làn gọi cùng module
+                  ┌────────────────────────────────────────┐
+                  │     OpenWeather Air Pollution API      │
+                  └───────────────────┬────────────────────┘
+                                      │
+        ┌─────────────────────────────┴─────────────────────────────┐
+        │ LÀN BATCH (lịch sử)                LÀN STREAMING (hiện tại)│
+        ▼                                                            ▼
+ backfill_history.py                                         live_poller.py
+ (200 điểm × 5 năm,                                          (mỗi giờ một lần)
+  ~8,58 triệu bản ghi)                                               │
+        │                                                            ▼
+        ▼                                                     ┌─────────────┐
+ HDFS /air-quality/raw  ◀──────────────────────────────────── │    Kafka    │
+        │                                                     │ air-quality-│
+        ▼                                                     │     raw     │
+ ┌────────────────────┐                                       └──────┬──────┘
+ │ Pha 1: Làm sạch    │                                              ▼
+ │ (Spark batch)      │                                   ┌────────────────────┐
+ └─────────┬──────────┘                                   │ Spark Structured   │
+           ▼                                              │ Streaming          │
+ ┌────────────────────┐      ┌─────────────────────┐      └─────────┬──────────┘
+ │ Pha 2: Tính AQI    │◀────▶│  aqi_core (dùng     │◀───────────────┘
+ │ Mapper: IAQI/chất  │      │  chung): Nowcast và │
+ │ Reducer: max → AQI │      │  bảng breakpoint    │
+ └─────────┬──────────┘      └─────────────────────┘
            ▼
-  ┌──────────────────┐
-  │ PHA 3  Tổng hợp  │
-  │ TB ngày, xếp hạng│
-  └────────┬─────────┘
+ ┌────────────────────┐
+ │ Pha 3: Tổng hợp    │
+ └─────────┬──────────┘
            │
-     ┌─────┴──────┐
-     ▼            ▼
- HDFS /agg     HBase air_quality
+    ┌──────┴───────┐
+    ▼              ▼
+ HDFS /agg    HBase air_quality  ◀── streaming cũng ghi vào đây
                    │
                    ▼
-           Query/API Bridge (FastAPI)
+            FastAPI (Query/API Bridge)
                    │
                    ▼
-               Grafana
+                Grafana
 ```
 
-**Vì sao phải có làn batch?** Vì làn streaming chỉ sinh ra vài nghìn bản ghi trong lúc demo —
-không đủ để gọi là big data, và không chạy được Pha 1/2/3 đúng tinh thần paper.
-Làn batch cho khối dữ liệu triệu bản ghi để đo hiệu năng phân tán.
+Làn batch tồn tại vì làn streaming chỉ sinh ra vài nghìn bản ghi trong lúc demo, không đủ để gọi
+là big data và không chạy được Pha 1/2/3 ở quy mô có ý nghĩa. Làn batch cung cấp khối dữ liệu hàng
+triệu bản ghi để đo hiệu năng phân tán.
 
-### Hai làn KHÔNG gộp lại làm một
+### Hai làn chạy độc lập
 
-Đây là hiểu nhầm hay gặp nhất. Hai làn chạy độc lập, khác nhịp hoàn toàn:
-
-| | Làn batch | Làn stream |
+| | Làn batch | Làn streaming |
 |---|---|---|
-| Chạy khi nào | 1 lần (hoặc thỉnh thoảng chạy lại) | liên tục 24/7 |
-| Mỗi lần xử lý | cả khối 8.7 triệu bản ghi | vài chục bản ghi |
-| Mất bao lâu | vài phút đến vài giờ | vài giây |
+| Chạy khi nào | một lần, thỉnh thoảng chạy lại | liên tục |
+| Mỗi lần xử lý | cả khối ~8,58 triệu bản ghi | vài chục bản ghi |
+| Thời gian | vài phút đến vài giờ | vài giây |
 
-Nếu gộp chung thì mỗi giờ có dữ liệu mới lại phải tính lại toàn bộ 8.7 triệu bản ghi — vô lý.
-**Hai làn gặp nhau ở ĐẦU RA** (cùng ghi vào `/aqi` và HBase), không phải ở đầu vào.
+Nếu gộp làm một thì mỗi giờ có dữ liệu mới lại phải tính lại toàn bộ lịch sử. Hai làn chỉ gặp nhau ở
+đầu ra: cùng ghi vào HBase và cùng dùng `aqi_core`, nên một bản ghi đi qua batch hay streaming đều cho
+cùng một AQI (có test kiểm tra điều này trong `spark/tests/test_streaming_aqi.py`).
 
-Kiến trúc này có tên: **Lambda Architecture** (batch layer + speed layer + serving layer).
-Nên gọi đúng tên trong báo cáo.
+### Một số điểm dễ hiểu nhầm
 
-### Vài điểm dễ nói sai trong báo cáo
+- Kafka không thu thập dữ liệu. Collector bằng Python mới là bên gọi API; Kafka là ống dẫn và kho đệm,
+  nếu Spark dừng vài giờ thì dữ liệu vẫn nằm trong Kafka chờ xử lý.
+- Đồ án không dùng thư viện Kafka Streams. Kafka chỉ đóng vai message broker, phần xử lý luồng là
+  Spark Structured Streaming.
+- Grafana là bên đi lấy dữ liệu: định kỳ nó gọi các endpoint của FastAPI, không có bước nào "đẩy" lên Grafana.
+- HDFS vừa là đầu vào vừa là đầu ra của Spark, gồm 4 tầng: `raw` → `clean` → `aqi` → `agg`.
 
-- **Kafka không thu thập dữ liệu.** Python Collector mới là thứ gọi API. Kafka là **ống dẫn + kho đệm**:
-  nếu Spark chết 2 tiếng, dữ liệu vẫn nằm trong Kafka chờ, không mất.
-- **"Kafka Streams" là thư viện khác, đồ án không dùng.** Ở đây Kafka chỉ đóng vai **message broker**;
-  phần *xử lý* stream là **Spark Structured Streaming**.
-- **Không ai "đẩy lên Grafana".** Grafana **tự đi lấy (pull)**: cứ 30 giây nó gọi `GET /aqi/latest`
-  của FastAPI. Chiều mũi tên ngược với các bước trước.
-- **HDFS không phải chỗ lưu một bản sao cuối cùng.** Nó vừa là **đầu vào** vừa là **đầu ra** của Spark,
-  và có 4 tầng: `/raw` → `/clean` → `/aqi` → `/agg`.
+## 3. Ánh xạ Mapper / Reducer
 
-## 3. Ánh xạ Mapper / Reducer (kế thừa El Fazziki 2015)
-
-| Pha | Mapper phát ra | Reducer làm gì | Output |
+| Pha | Mapper phát ra | Reducer làm gì | Đầu ra |
 |---|---|---|---|
-| **1. Làm sạch** | `key=(station_id, ts)`, `value=bản ghi thô` | Khử trùng lặp, loại giá trị âm/ngoài ngưỡng, nội suy điểm thiếu | `/clean` |
-| **2. Tính AQI** | `key=(station_id, ts)`, `value=IAQI từng chất` theo bảng breakpoint | `AQI = max(IAQI)`, gán mức + chất trội | `/aqi` |
-| **3. Tổng hợp** | `key=(city, date)` hoặc `(city, level)` | Trung bình/max, đếm phân bố mức, xếp hạng | `/agg`, HBase |
+| 1. Làm sạch | key `(station_id, ts)`, value là bản ghi thô | Khử trùng lặp, loại giá trị âm hoặc ngoài ngưỡng, nội suy các điểm thiếu ngắn | `/clean` |
+| 2. Tính AQI | key `(station_id, ts)`, value là IAQI từng chất theo bảng breakpoint | `AQI = max(IAQI)`, gán mức và chất trội | `/aqi` |
+| 3. Tổng hợp | key `(city, date)` hoặc `(city, level)` | Trung bình, max, đếm phân bố mức, xếp hạng | `/agg` |
 
-> Trên Spark DataFrame, **"Mapper" = `withColumn`/`map`**, **"Reducer" = `groupBy().agg()`**.
-> Trong báo cáo vẫn trình bày theo ngôn ngữ Mapper/Reducer để bám paper.
+Trên Spark DataFrame, "Mapper" tương ứng với `withColumn` / `map` và "Reducer" tương ứng với
+`groupBy().agg()`. Báo cáo vẫn trình bày theo ngôn ngữ Mapper/Reducer để bám bài báo gốc.
 
----
-
-## 4. Hai thứ tự đừng nhầm lẫn
-
-**Thứ tự DỮ LIỆU CHẠY** (lúc hệ thống đã xong):
+## 4. Cấu trúc thư mục
 
 ```
-API → Collector → Kafka → Spark → HDFS/HBase → FastAPI → Grafana
+.
+├── README.md               file này
+├── CONTRACTS.md            định nghĩa schema và giao diện giữa các thành phần
+├── .env.example            mẫu biến môi trường (OWM_API_KEY, Kafka, HDFS, HBase)
+├── collector/              gọi OpenWeather, ghi Kafka và HDFS
+│   ├── src/                owm_client, normalize, backfill_history, live_poller, kafka_producer
+│   ├── config/cities.json  200 điểm quan trắc
+│   └── tests/              kiểm tra schema của response thật
+├── spark/
+│   ├── aqi_core/           công thức AQI dùng chung (iaqi.py, bảng breakpoint VN và EPA)
+│   ├── jobs/               Pha 1/2/3, streaming, nạp lịch sử vào HBase, phân cụm, dự báo
+│   ├── sinks/              ghi HBase (row key, cột)
+│   ├── experiments/        đo scalability của Pha 2
+│   └── tests/              unit test (pytest)
+├── serving/                FastAPI đọc HBase cho Grafana
+├── grafana/                dashboard và cấu hình datasource
+├── docker/                 docker-compose toàn bộ hệ thống
+├── scripts/                khởi tạo topic Kafka, thư mục HDFS, bảng HBase; sinh dashboard
+├── data/
+│   ├── fixtures/           response nguyên bản của API
+│   └── samples/            dữ liệu mẫu để chạy Spark cục bộ không cần hạ tầng
+├── final_results/json/     kết quả phân cụm và backtest dự báo của lần chạy cuối
+└── docs/
+    ├── cai-dat.md          cài đặt, cấu hình máy, kết nối HBase–HDFS, tham số đã chỉnh
+    ├── huong-dan-chay.md   các lệnh chạy Pha 1→3, nạp HBase, streaming, phân cụm, dự báo
+    ├── experiments.md      số liệu thực nghiệm
+    ├── images/, experiments_data/   biểu đồ và số đo thô của thực nghiệm scalability
+    └── report/             báo cáo Word của phần thu thập dữ liệu
 ```
 
-**Thứ tự MÌNH CODE** (lúc đang làm):
+## 5. Các thành phần chính
 
-```
-Công thức AQI → Pha 1,2 chạy file local → HDFS → HBase/API/Grafana → Kafka/Streaming
-```
+### 5.1. `CONTRACTS.md`
 
-Hai thứ tự này **khác nhau**, và code theo thứ tự thứ nhất là sai lầm tốn thời gian nhất.
+Định nghĩa những thứ mà các thành phần phải dùng giống hệt nhau: schema message (C1), cây thư mục HDFS
+(C2), schema parquet sau Pha 2 (C3), row key HBase (C4), endpoint API (C5), topic Kafka (C6), biến môi
+trường (C7) và định dạng hai file kết quả của nhánh mở rộng (C8). Muốn đổi mục nào thì sửa file này
+trước rồi mới sửa code.
 
-Vì sao: nếu dựng Collector → Kafka → Spark theo đúng dòng dữ liệu, thì phải xong gần hết
-hệ thống mới biết công thức AQI đúng hay sai. Sai ở bước cuối = đập đi làm lại.
-Còn công thức AQI thì **chạy được ngay bằng `python`, không cần Docker, Kafka hay HDFS gì cả**.
+### 5.2. `docker/docker-compose.yml`
 
-| | Làm gì | Vì sao trước |
-|---|---|---|
-| 1 | **Công thức AQI + unit test** | Không cần hạ tầng gì. Phần dễ sai nhất mà lại dễ test nhất. |
-| 2 | **Pha 1 + Pha 2 trên file local** | `spark local[*]` đọc jsonl. Đến đây đã có "đồ án" rồi. |
-| 3 | **Backfill dữ liệu thật + HDFS** | Giờ mới cần Hadoop. Đổi đường dẫn input, logic không sửa. |
-| 4 | **HBase + FastAPI + Grafana** | Có kết quả rồi mới hiển thị. |
-| 5 | **Kafka + streaming** | **Cuối cùng.** Khó debug nhất, và không tạo ra kết quả phân tích nào mới. |
+Khai báo các service: Kafka (KRaft), HDFS (namenode, datanode), Spark (master, worker), ZooKeeper,
+HBase (master, regionserver), HBase Thrift, FastAPI và Grafana. Nên dựng từng service một và kiểm tra
+xong mới thêm service tiếp theo, thứ tự `kafka → hdfs → spark → zookeeper → hbase → grafana`; dựng
+cả file một lần thì nhiều lỗi xuất hiện cùng lúc và khó biết lỗi nào gây ra lỗi nào. Chi tiết cấu hình
+máy xem [docs/cai-dat.md](docs/cai-dat.md).
 
-Kafka + Streaming xếp cuối vì giá trị của nó là chứng minh hệ thống chạy liên tục.
-Hết thời gian thì bỏ được làn streaming mà đồ án vẫn đứng vững; bỏ Pha 2 thì không còn gì để bảo vệ.
+### 5.3. `collector/`
 
----
+Phần tạo ra dữ liệu cho toàn bộ hệ thống.
 
-## 5. Bản đồ repo
+| File | Vai trò |
+|---|---|
+| `src/owm_client.py` | Bọc hai endpoint OpenWeather (hiện tại, lịch sử); xử lý retry, throttle ≤ 1 call/giây, lỗi 401 và 429 |
+| `src/normalize.py` | Đổi response thô của API thành schema C1. API không có trường nào định danh thành phố, nên `station_id`, `city`, `country` được gắn vào từ `config/cities.json` |
+| `src/backfill_history.py` | Quét lịch sử 200 điểm × 5 năm, ghi HDFS `/air-quality/raw/`, có checkpoint để chạy lại được |
+| `src/live_poller.py` | Gọi API hiện tại mỗi giờ và gửi vào Kafka (OpenWeather cập nhật theo giờ nên gọi dày hơn không có thêm dữ liệu) |
+| `src/kafka_producer.py` | Producer, key là `station_id` để cùng một trạm luôn vào cùng partition và giữ đúng thứ tự thời gian |
+| `config/cities.json` | 200 điểm quan trắc; vừa là đầu vào của collector, vừa là bảng tra thông tin trạm |
 
-```
-aqi-bigdata/
-├── README.md              ★ file này — kiến trúc + giải thích từng phần
-├── CONTRACTS.md           ★ hợp đồng schema giữa 2 người — đọc trước tiên
-├── WORKPLAN.md            ★ chia việc + milestone M0–M5
-├── docker/                [A] docker-compose toàn hệ thống
-├── collector/             [A] gọi OpenWeather → Kafka + HDFS
-├── spark/                 [B] aqi_core + 4 job (pha 1,2,3 + streaming)
-├── serving/               [A] FastAPI đọc HBase cho Grafana
-├── grafana/               [A] dashboard JSON
-├── data/fixtures/         [A] response nguyên bản của API
-├── data/samples/          ★ dữ liệu mẫu để 2 người làm song song không chờ nhau
-├── scripts/               [A] script khởi tạo topic / HDFS / HBase
-└── docs/                  [B] thực nghiệm · [A] hướng dẫn arm64
-```
+Backfill chia theo cửa sổ 90 ngày vì một lần gọi lấy được đủ 90 ngày (thử thực tế: 2.041 bản ghi, không
+bị cắt). So với chia 30 ngày, cách này giảm số call từ 12.200 xuống 4.200 (200 trạm × 21 cửa sổ), khoảng
+1,2 giờ ở tốc độ 1 call/giây thay vì 3,4 giờ. Đã kiểm tra rằng tách một cửa sổ 90 ngày thành hai cửa sổ 45 ngày trả về đúng các mốc thời gian
+cũ, nên các giờ bị thiếu là thiếu ở nguồn OpenWeather chứ không do cách chia cửa sổ.
 
-| Thư mục | Là gì | Ai giữ | Cần có trước |
-|---|---|---|---|
-| `CONTRACTS.md` | Hợp đồng schema giữa 2 người | **chung** | — |
-| `WORKPLAN.md` | Chia việc, milestone | **chung** | — |
-| `docker/` | Dựng 6 service hạ tầng | A | — |
-| `collector/` | Gọi API → Kafka + HDFS | A | Docker |
-| `serving/` | FastAPI đọc HBase | A | HBase có dữ liệu |
-| `grafana/` | Dashboard | A | FastAPI chạy |
-| `scripts/` | Khởi tạo topic/HDFS/HBase | A | Docker |
-| `data/fixtures/` | Response **nguyên bản** của API | A | — |
-| `data/samples/` | Dữ liệu **đã chuẩn hoá** để dev offline | chung | — |
-| `spark/aqi_core/` | Công thức AQI — **lõi đồ án** | B | — |
-| `spark/jobs/` | Pha 1, 2, 3 + streaming | B | aqi_core |
-| `docs/` | Kết quả thực nghiệm | B | có dữ liệu |
+### 5.4. Kiểm chứng schema với API thật
 
----
-
-## 6. Giải thích từng phần
-
-> Mỗi phần trả lời 4 câu: **là gì · vì sao cần · vào gì ra gì · ai giữ**.
-
-### 6.1. `CONTRACTS.md` — quan trọng nhất repo
-
-**Là gì:** định nghĩa đúng 7 thứ mà cả hai người phải dùng giống hệt nhau:
-schema message, đường dẫn HDFS, schema parquet, row key HBase, endpoint API, topic Kafka, biến môi trường.
-
-**Vì sao cần:** khi 2 người code song song, thứ duy nhất khiến code ghép được vào nhau là các
-định nghĩa này. Nếu A đặt tên trường `pm25` mà B viết code đọc `pm2_5` thì đến lúc ghép mới phát hiện —
-và lúc đó đã có vài nghìn dòng code viết sai.
-
-**Quy tắc:** muốn đổi bất kỳ mục nào → báo người kia, sửa `CONTRACTS.md` trước, rồi mới sửa code.
-Không bao giờ sửa code trước.
-
-### 6.2. `docker/docker-compose.yml` · NGƯỜI A
-
-**Là gì:** khai báo 6 service: Kafka, HDFS (namenode + datanode), Spark (master + worker),
-ZooKeeper, HBase (master + regionserver), Grafana.
-
-**Vì sao cần:** để cả hệ thống dựng lại được bằng 1 lệnh trên máy bất kỳ. Đồ án bị chấm ở chỗ
-"chạy lại được không" — cài tay từng thứ thì đến lúc demo trên máy khác là chết.
-
-**Cách làm đúng:** **dựng từng service một, test xong mới thêm service tiếp theo.**
-Viết cả file rồi `docker compose up` một lần là cách nhanh nhất để có 6 lỗi cùng lúc
-không biết lỗi nào gây ra lỗi nào. Thứ tự: `kafka` → `hdfs` → `spark` → `zookeeper` → `hbase` → `grafana`
-
-> **Bẫy WSL2:** phải cấp ≥10GB RAM trong `C:\Users\<user>\.wslconfig` trước.
-> Mặc định WSL2 lấy ~50% RAM máy, HBase RegionServer sẽ chết ngẫu nhiên mà không báo lỗi rõ ràng.
-
-### 6.3. `collector/` · NGƯỜI A
-
-Phần **tạo ra dữ liệu cho toàn bộ đồ án**. Không có nó thì B không có gì để xử lý.
-
-#### `src/owm_client.py`
-**Là gì:** lớp bọc quanh 2 endpoint OpenWeather (hiện tại + lịch sử).
-**Vì sao tách riêng:** để chỗ retry / throttle / đếm quota nằm một chỗ, không rải khắp code.
-**Vào → ra:** `(lat, lon, start, end)` → list JSON thô.
-**Phải xử lý:** `401` (key chưa active — chờ 10 phút–2 tiếng, đừng retry vô hạn),
-`429` (vượt rate limit — backoff), throttle ≤1 call/giây.
-
-#### `src/normalize.py` ← **file quan trọng nhất của Người A**
-**Là gì:** biến response thô của API thành schema C1.
-**Vì sao quan trọng:** mọi thứ phía sau phụ thuộc vào nó đúng schema. Sai một tên trường là Spark job của B chết.
-
-```
-API trả:  {"coord":{...}, "list":[{"dt":..., "main":{"aqi":2}, "components":{...}}]}
-                                     ↓  normalize()
-C1:       {"station_id":"VN_HCM_01", "city":"Ho Chi Minh City", "country":"VN",
-           "ts_utc":"...", "owm_aqi":2, "components":{...}}
-```
-
-API **không có trường nào định danh thành phố** — `station_id`, `city`, `country` phải do Collector
-gắn vào từ `config/cities.json`. Đó chính là lý do file này tồn tại.
-
-**Input mẫu để viết:** `data/fixtures/owm_air_pollution_raw.json`
-
-#### `src/backfill_history.py` ← **thứ tạo ra "big data" cho đồ án**
-**Là gì:** quét 200 điểm × 3–5 năm lịch sử → HDFS `/air-quality/raw/`.
-**Vì sao cần:** làn streaming chạy demo 1 tuần chỉ được ~33.000 bản ghi. Backfill cho ~8.7 triệu.
-Không có nó thì Pha 1/2/3 không có gì để chạy và không đo được scalability.
-
-**Cách chạy — đã kiểm chứng:** một call lấy được **đủ 90 ngày** (thử 90 ngày → nhận 2041 bản ghi,
-không bị cắt). Nên chunk theo **quý**, không phải theo tháng:
-
-| Chunk | Call/trạm (5 năm) | 200 trạm | Thời gian ở 1 call/giây |
-|---|---|---|---|
-| 30 ngày | 61 | 12.200 | ~3,4 giờ |
-| **90 ngày** ⭐ | **21** | **4.200** | **~1,2 giờ** |
-
-Vẫn phải có checkpoint để chạy lại không mất công. Ước tính thu được **~8,3 triệu bản ghi**
-(200 trạm × 5 năm × 8760h × 94,4% tỉ lệ đầy đủ).
-
-#### `src/live_poller.py`
-**Là gì:** gọi API hiện tại mỗi 30–60 phút → Kafka.
-**Vì sao chỉ 30–60 phút:** OpenWeather cập nhật theo giờ. Gọi dày hơn chỉ phí quota, không có dữ liệu mới.
-
-#### `src/kafka_producer.py`
-Wrapper producer. Key = `station_id` → cùng trạm luôn vào cùng partition → giữ đúng thứ tự thời gian.
-
-#### `config/cities.json`
-Danh sách ~200 điểm quan trắc, lọc từ `city.list.json.gz` của OpenWeather (file này tải miễn phí).
-Vừa là input của Collector, vừa là **bảng dimension** để join trong Spark sau này.
-
-### 6.4. `data/` — dữ liệu mẫu · CHUNG
-
-Thứ khiến **2 người làm song song mà không phải chờ nhau**.
-
-| File | Dạng | Cho ai |
-|---|---|---|
-| `fixtures/owm_air_pollution_raw.json` | Response **nguyên bản** của API + 8 cái bẫy đã biết | **A** — viết `normalize()` ăn đúng dạng này |
-| `samples/air_quality_sample.jsonl` | ~4.900 bản ghi **đã chuẩn hoá theo C1** | **B** — Spark `local[*]` đọc thẳng |
-| `samples/generate_sample.py` | Script sinh lại sample (seed cố định) | chung |
-
-B chạy `local[*]` trên sample → làm được toàn bộ Pha 1/2/3 mà **không cần Kafka, HDFS hay Docker**.
-
-Sample cố tình chứa 5 loại lỗi của dữ liệu thật (gap, trùng, null, âm, spike) và mô phỏng đúng
-động lực học (tự tương quan lag-1 ≈ 0.83, chu kỳ ngày đêm đỉnh 7h/19h). Nếu sample quá sạch thì
-Pha 1 viết ra sẽ vỡ khi gặp dữ liệu thật ở M2.
-
-> ⚠️ Sample hiện tại là **dữ liệu sinh giả**. Ở M0 phải thay bằng dữ liệu thật từ API.
-
-#### Mức căn cứ của schema — ĐÃ KIỂM CHỨNG
-
-Ngày **13/09/2026** đã gọi API thật (TP.HCM, 1 bản ghi hiện tại + 145 bản ghi lịch sử 7 ngày)
-và đối chiếu toàn bộ giả định. Response thật lưu ở `data/fixtures/owm_air_pollution_raw.json`.
+Ngày 13/09/2026 đã gọi API thật (TP.HCM: 1 bản ghi hiện tại và 145 bản ghi lịch sử 7 ngày) để đối chiếu
+các giả định. Response lưu ở `data/fixtures/owm_air_pollution_raw.json`.
 
 | Giả định | Kết quả |
 |---|---|
-| Top-level `{coord, list}` | ✅ đúng |
-| `coord` là object `{lon, lat}` | ✅ đúng |
-| `list[i]` = `{main, components, dt}` | ✅ đúng |
-| `components` đúng 8 trường, µg/m³ | ✅ đúng, history và current giống hệt nhau |
-| Bảng breakpoint 1–5 của OpenWeather | ✅ **khớp 146/146 bản ghi (100%)** — bảng em nhớ là đúng |
-| `coord` trả về = toạ độ gửi đi | ❌ **SAI** — lệch ~78m → quy tắc **R2** |
-| `dt` luôn tròn giờ | ❌ **SAI một nửa** → quy tắc **R1** |
-| History trả đủ mọi mốc giờ | ❌ **SAI** — chỉ 85.8% |
+| Top-level `{coord, list}`, `list[i] = {main, components, dt}` | đúng |
+| `components` có đúng 8 trường, đơn vị µg/m³ | đúng, history và current giống nhau |
+| Bảng breakpoint 1–5 của OpenWeather | khớp 146/146 bản ghi |
+| `coord` trả về bằng toạ độ đã gửi | sai, lệch khoảng 78 m |
+| `dt` luôn tròn giờ | sai với endpoint hiện tại |
+| History trả đủ mọi mốc giờ | sai, chỉ có 85,8% |
 
-**Hai giả định sai đã thành quy tắc bắt buộc trong `CONTRACTS.md`:**
+Hai giả định sai đã trở thành quy tắc trong `CONTRACTS.md`:
 
-- **R1 — timestamp.** `history` tròn giờ (145/145) nhưng `current` **không** (`11:37:10Z`).
-  `normalize()` phải làm tròn **xuống** giờ, giữ số gốc ở trường mới `dt_raw`.
-  Không làm thế thì bản ghi live 11:37 và bản ghi history 11:00 thành hai bản ghi khác nhau
-  → `dropDuplicates` không bắt được → HBase có 2 row cho cùng một giờ → số liệu đếm hai lần.
-- **R2 — toạ độ.** Gửi `10.8231/106.6297`, API trả `10.8238/106.6289`.
-  `lat`/`lon` luôn lấy từ `config/cities.json`, không bao giờ lấy từ `coord` của response.
+- R1, timestamp: `history` tròn giờ nhưng `current` thì không (ví dụ `11:37:10Z`). `normalize()` làm
+  tròn xuống giờ và giữ số gốc ở `dt_raw`. Nếu không làm vậy, bản ghi live 11:37 và bản ghi history
+  11:00 là hai bản ghi khác nhau, `dropDuplicates` không bắt được và cùng một giờ bị đếm hai lần.
+- R2, toạ độ: `lat`/`lon` luôn lấy từ `cities.json`, không lấy từ `coord` của response.
 
-**Phát hiện lớn nhất — dữ liệu thiếu CÓ QUY LUẬT:**
+Dữ liệu thiếu có quy luật: trong 90 ngày thật có 4 khoảng đứt (24h, 24h, 48h, 24h), đều là khối nguyên
+ngày và đều bắt đầu đúng 01:00 UTC. Vì vậy Pha 1 không nội suy qua các khoảng dài mà đánh dấu ngày đó là
+thiếu dữ liệu. Tỉ lệ đầy đủ trên 90 ngày là 94,4%; mẫu 7 ngày cho 85,8% vì rơi trúng một khoảng đứt, nên
+không nên kết luận từ cửa sổ quá ngắn. Cửa sổ 7 ngày cũng không đủ để hiệu chỉnh phân phối: PM2.5 lớn
+nhất là 10,1 trong 7 ngày (mùa mưa) nhưng 112,9 trong 90 ngày.
 
-Trên 90 ngày thật có 4 khoảng đứt: `24h`, `24h`, `48h`, `24h`. Tất cả đều là **khối nguyên ngày**
-và tất cả đều **bắt đầu đúng 01:00 UTC**. Không một giờ lẻ nào bị thiếu.
+### 5.5. `data/`
 
-Đây không phải nhiễu ngẫu nhiên mà là **ngày dữ liệu bị mất cả khối**, và nó đổi hẳn cách viết Pha 1:
+| File | Nội dung |
+|---|---|
+| `fixtures/owm_air_pollution_raw.json` | Response nguyên bản của API |
+| `samples/air_quality_sample.jsonl` | 10.142 bản ghi đã chuẩn hoá theo C1 (5 trạm × 90 ngày), sinh bằng mô hình thống kê hiệu chỉnh theo số liệu thật |
+| `samples/generate_sample.py` | Script sinh lại sample (seed cố định) |
+| `samples/ext_*_sample.json` | Mẫu hai file kết quả của nhánh mở rộng, dùng khi chưa có kết quả thật |
 
-- ❌ **Không** nội suy qua khoảng 24 giờ — quá dài, nội suy sẽ bịa ra số liệu.
-- ✅ Đánh dấu ngày đó **thiếu dữ liệu**, loại khỏi AQI ngày, và **báo cáo tỉ lệ ngày hợp lệ**.
-- Khớp luôn với yêu cầu của QĐ 1459 về độ đầy đủ tối thiểu trong cửa sổ 24h.
+Sample là dữ liệu sinh giả, dùng để chạy Spark cục bộ (`local[*]`, không cần Kafka, HDFS hay Docker) và
+để test, không dùng để rút ra kết luận phân tích. Mọi số liệu trong báo cáo phải lấy từ dữ liệu thật trên HDFS.
 
-Tỉ lệ đầy đủ thật: **94,4% trên 90 ngày**. (Mẫu 7 ngày cho 85,8% vì rơi trúng đúng một gap —
-đây cũng là bài học: đừng kết luận từ cửa sổ quá ngắn.)
+### 5.6. `spark/aqi_core/`
 
-**Và 7 ngày không đủ để hiệu chỉnh phân phối:** `pm2_5` max trong 7 ngày là **10,1** nhưng
-trong 90 ngày là **112,9** — rộng gấp 11 lần. Cửa sổ 7 ngày rơi vào mùa mưa, không khí sạch.
-
-### 6.5. `spark/aqi_core/` — LÕI ĐỒ ÁN · NGƯỜI B
-
-#### `iaqi.py` ← **trái tim của đồ án**
+`iaqi.py` là phần cốt lõi của đồ án:
 
 ```
         I_high - I_low
- IAQI = --------------- × (C - BP_low) + I_low        ← nội suy tuyến tính, mỗi chất một số
+IAQI = ----------------- × (C - BP_low) + I_low        nội suy tuyến tính, mỗi chất một giá trị
         BP_high - BP_low
 
- AQI  = max(IAQI của tất cả các chất)                 ← chất nào tệ nhất quyết định
+AQI  = max(IAQI của các chất)                          chất nào tệ nhất quyết định AQI
 ```
 
-**Vì sao đây là lõi:** OpenWeather có trả sẵn `owm_aqi` nhưng đó là **thang 1–5 riêng của họ**.
-Nếu dùng thẳng số đó thì Pha 2 không còn gì để tính và **đồ án mất luôn phần đóng góp khoa học**.
+PM2.5 và PM10 dùng Nowcast trên cửa sổ 12 giờ, các chất còn lại dùng giá trị theo giờ. Làn batch và làn
+streaming cùng import module này; không sao chép công thức sang nơi khác, vì như vậy hai làn có thể cho
+hai kết quả khác nhau. Bảng breakpoint nằm trong `breakpoints_vn.json` và `breakpoints_epa.json` để đổi
+chuẩn mà không sửa code.
 
-**QUY TẮC VÀNG:** làn batch và làn streaming **cùng import module này**, không ai được copy công thức
-sang chỗ khác. Copy = hai làn cho ra số khác nhau và không ai biết số nào đúng.
+Các test trong `spark/tests/test_iaqi.py` đối chiếu với các ví dụ tính tay theo QĐ 1459.
 
-#### `breakpoints_vn.json` / `breakpoints_epa.json`
-Bảng tra nồng độ → khoảng AQI. Tách ra file riêng để đổi chuẩn mà không sửa code.
+### 5.7. `spark/jobs/`
 
-> ⚠️ Số trong 2 file này **chưa được kiểm chứng** — dựng sẵn để code chạy được.
-> Người B phải đối chiếu từng số với văn bản QĐ 1459 gốc ở M0 trước khi dùng cho báo cáo.
+| Job | Vào → ra | Nội dung |
+|---|---|---|
+| `phase1_clean.py` | `/raw` → `/clean` | Khử trùng lặp, loại giá trị âm và ngoài ngưỡng vật lý, dựng lưới giờ đầy đủ để lộ ra các giờ thiếu, nội suy các khoảng thiếu ≤ 3 giờ, gắn cờ chất lượng (`ok`, `interpolated`, `missing`) và cờ ngày không đủ dữ liệu |
+| `phase1_clean_resumable_v4.py` | `/raw` → `/clean` | Bản Pha 1 chia thành ba giai đoạn (grid, interpolate, final) có thể chạy tiếp khi bị ngắt; dùng khi chạy trên toàn bộ dữ liệu 5 năm. Chạy qua `scripts/run_phase1_v4.sh` |
+| `phase2_aqi.py` | `/clean` → `/aqi` | Tính IAQI từng chất và AQI bằng `aqi_core`; có thể xuất bảng đối chiếu `aqi` tự tính với `owm_aqi` |
+| `phase3_aggregate.py` | `/aqi` → `/agg` | Trung bình AQI theo (thành phố, ngày), phân bố 6 mức, xếp hạng thành phố |
+| `load_history_to_hbase.py` | `/aqi` → HBase | Nạp lịch sử vào HBase (ghi theo row key nên chạy lại chỉ ghi đè cùng dòng) |
+| `streaming_aqi.py` | Kafka → HBase, HDFS | Đọc Kafka, tính AQI bằng `aqi_core`, ghi HBase và lưu bản ghi thô vào HDFS. Lấy 11 giờ trước đó của từng trạm từ HBase để tính Nowcast, nên phải nạp lịch sử vào HBase trước khi bật streaming |
+| `ext_clustering.py` | `/aqi` → JSON | Phân cụm (thành phố, tháng) bằng K-means, GMM, Bisecting K-means, DBSCAN, HDBSCAN; chọn theo silhouette Euclidean chung |
+| `ext_forecast.py` | `/aqi` → JSON | Dự báo AQI sau 24 giờ ở ba tầng: SGD hồi quy trực tuyến, Random Forest, CNN-LSTM |
 
-#### `tests/test_iaqi.py`
-**Phải có ≥3 case tính tay đối chiếu ví dụ trong QĐ 1459** — đây là bằng chứng duy nhất chứng minh
-công thức đúng. Không có nó thì không ai tin con số trong báo cáo.
+### 5.8. `serving/app/main.py`
 
-### 6.6. `spark/jobs/` — pipeline · NGƯỜI B
+Grafana không nối thẳng vào HBase mà đi qua FastAPI, để đổi schema HBase chỉ phải sửa một chỗ.
 
-#### `phase1_clean.py` — PHA 1: LÀM SẠCH
-| | |
+| Endpoint | Nội dung |
 |---|---|
-| Vào | `/air-quality/raw/` (jsonl thô) |
-| Ra | `/air-quality/clean/` (parquet) |
-| Mapper | key = `(station_id, ts_utc)`, value = bản ghi thô |
-| Reducer | khử trùng lặp, loại ngoại lai, nội suy điểm thiếu |
+| `GET /health` | Kiểm tra dịch vụ |
+| `GET /stations` | Danh sách trạm (lọc theo `country`) |
+| `GET /aqi/latest` | AQI mới nhất của từng trạm |
+| `GET /aqi/timeseries` | Chuỗi AQI của một trạm theo khoảng thời gian |
+| `GET /aqi/ranking` | Xếp hạng thành phố theo ngày |
+| `GET /ext/clusters` | Kết quả phân cụm, lọc theo `month`, `country` |
+| `GET /ext/forecast` | Backtest dự báo, lọc theo `station_id` |
 
-Phải xử lý đúng 5 loại lỗi có trong sample. **Và một việc ít ai để ý:** chuẩn VN yêu cầu
-PM2.5/PM10 dùng **trung bình trượt 24 giờ**, các chất khác dùng giá trị giờ.
-Cửa sổ trung bình này tính ở Pha 1, không phải Pha 2.
+Hai endpoint `/ext/*` chỉ đọc file JSON trong `final_results/json/` (nếu chưa có thì dùng file mẫu trong
+`data/samples/`); chúng không chạy mô hình nào. Schema xem CONTRACTS.md, mục C5 và C8.
 
-#### `phase2_aqi.py` — PHA 2: TÍNH AQI ← trọng tâm
-| | |
+### 5.9. `scripts/`, `grafana/`
+
+| File | Vai trò |
 |---|---|
-| Vào | `/air-quality/clean/` |
-| Ra | `/air-quality/aqi/` (schema C3) |
-| Mapper | mỗi bản ghi → IAQI của từng chất |
-| Reducer | `AQI = max(IAQI)` + gán mức + chất trội |
+| `scripts/01_create_topics.sh` | Tạo hai topic Kafka theo C6 |
+| `scripts/02_init_hdfs.sh` | Tạo cây thư mục HDFS theo C2 |
+| `scripts/03_init_hbase.sh` | Tạo bảng `air_quality` theo C4 |
+| `scripts/run_phase1_v4.sh` | Chạy Pha 1 bản chịu lỗi trong container `spark-master` |
+| `scripts/generate_grafana_dashboard.py` | Sinh `grafana/dashboards/aqi-overview.json` |
+| `scripts/generate_cities_200.py`, `curate_global_50.py` | Dựng danh sách 200 điểm trong `cities.json` |
+| `grafana/` | Dashboard (UID `aqi-big-data-overview`, file `dashboards/aqi-overview.json`) và provisioning; datasource Infinity trỏ vào `http://serving-api:8000` |
 
-Gọi `aqi_core.iaqi` — **không viết lại công thức ở đây**.
-Output phụ cần cho báo cáo: bảng đối chiếu `aqi` tự tính vs `owm_aqi`.
+## 6. Kết quả chính
 
-#### `phase3_aggregate.py` — PHA 3: TỔNG HỢP
-Ba output đúng như 3 job của repo tham chiếu Iris-pot/AQI_analysis: trung bình AQI theo
-(thành phố, ngày) · đếm phân bố 6 mức · xếp hạng thành phố.
-Dữ liệu 5 năm cho phép thêm chiều **mùa vụ** — rất đáng đưa vào báo cáo.
+Chi tiết, kèm các hạn chế của từng phép đo, ở [docs/experiments.md](docs/experiments.md).
 
-#### `streaming_aqi.py` — làn stream
-Kafka → parse C1 → `aqi_core` (**cùng module với Pha 2**) → HBase + HDFS.
-
-**Test bắt buộc:** cho cùng một bản ghi chạy qua cả batch và streaming → hai bên phải ra **cùng AQI**.
-Đây là bằng chứng "một lõi dùng chung" hoạt động.
-
-#### `ext_clustering.py` / `ext_forecast.py` — NGOÀI LÕI
-Chọn **1 trong 2**, chỉ làm khi Pha 1/2/3 đã xong và ổn định. Đây là phần mục 7 của tài liệu khảo cứu
-(thay K-means bằng GMM/Bisecting K-means, thay LaSVM bằng Random Forest/XGBoost).
-
-### 6.7. `serving/app/main.py` — cầu nối · NGƯỜI A
-
-**Vì sao cần:** Grafana **không** nối thẳng vào HBase. Lớp này tách dashboard khỏi chi tiết HBase —
-đổi schema HBase sau này chỉ phải sửa một chỗ, dashboard không biết gì.
-
-5 endpoint chốt ở `CONTRACTS.md` §C5.
-
-### 6.8. `grafana/`, `scripts/`, `docs/`
-
-| | |
+| Nội dung | Kết quả |
 |---|---|
-| `grafana/dashboards/` | JSON export của dashboard, để dựng lại được trên máy khác |
-| `scripts/01_create_topics.sh` | tạo 2 topic Kafka theo §C6 |
-| `scripts/02_init_hdfs.sh` | tạo cây thư mục HDFS theo §C2 |
-| `scripts/03_init_hbase.sh` | tạo bảng `air_quality` theo §C4 |
-| `docs/experiments.md` | **bảng số liệu thực nghiệm — phần dễ bị bỏ quên nhất** |
+| Dữ liệu thu thập | 200 điểm, 2021-09-01 → 2026-09-01, 8.576.904 bản ghi thô (97,80% so với kỳ vọng; phần thiếu là thiếu ở nguồn OpenWeather), 279,4 MB nén |
+| Scalability Pha 2 (đo `local[N]` trên máy 8 core) | 8M bản ghi: 567,7 s với 1 executor, 204,5 s với 4 executor, tăng tốc 2,78 lần; speedup tăng theo kích thước dữ liệu |
+| Phân cụm | K-means k=3 chọn theo silhouette, giá trị 0,3547 (cấu trúc yếu theo thang Kaufman & Rousseeuw) nhưng ba cụm giải thích được: nền chung, ô nhiễm nặng, sạch |
+| Dự báo AQI 24 giờ | Random Forest thắng nhẹ: RMSE 20,10, R² 0,7297; SGD và CNN-LSTM sát sau (R² 0,7243 và 0,7251) |
 
-Về `experiments.md`: đồ án big data bị chấm nặng ở chỗ **chứng minh vì sao cần phân tán**.
-Chạy Pha 2 trên 100K / 1M / 8M bản ghi × 1 / 2 / 4 executor, vẽ biểu đồ thời gian chạy và speedup.
-Không có bảng này thì hội đồng sẽ hỏi "sao không dùng pandas cho nhanh".
+Một số hạn chế cần biết khi đọc các con số trên (giải thích đầy đủ trong `docs/experiments.md`):
+scalability đo bằng `local[N]` trên một máy chứ không phải cụm nhiều máy; Random Forest chạy với tham số
+nhỏ hơn thiết kế (`num_trees=20`, `max_depth=5`) do giới hạn bộ nhớ trên driver; tập test của CNN-LSTM
+nhỏ hơn hai tầng còn lại nên không so sánh trực tiếp được; bảng so sánh đầy đủ 5 thuật toán phân cụm
+trên dữ liệu thật chưa được lưu lại.
 
----
+## 7. Chạy thử
 
-## 7. Ai chờ ai
+### 7.1. Không cần hạ tầng: test và chạy Spark cục bộ trên dữ liệu mẫu
 
-```
-A: docker ──▶ collector ──▶ backfill ──▶ HDFS /raw ──┐
-                                                      ├──▶ Pha 1 ──▶ Pha 2 ──▶ Pha 3 ──▶ HBase ──▶ API ──▶ Grafana
-B: aqi_core ─────────────────────────────────────────┘                                      (A)      (A)
-```
-
-Nhìn sơ đồ thì B phải chờ A xong backfill. **Nhưng không**, nhờ `data/samples/`:
-
-| Giai đoạn | A làm | B làm | Có chờ nhau? |
-|---|---|---|---|
-| M0 | lấy API key, sinh sample | chốt bảng breakpoint | **không** |
-| M1 | dựng Docker | aqi_core + Pha 1 trên sample | **không** |
-| M2 | backfill vào HDFS | Pha 2 trên sample → rồi đổi sang HDFS | **không** |
-| M3 | HBase + FastAPI | Pha 3 + streaming | B cần bảng HBase của A |
-| M4 | Grafana | thực nghiệm + mở rộng | A cần API của B chạy xong |
-| M5 | test end-to-end | báo cáo | cùng làm |
-
-Chỗ duy nhất thật sự chờ nhau là **M3** (B cần bảng HBase để ghi vào).
-Giải: A tạo bảng HBase **sớm ở M1** — tạo bảng rỗng chỉ mất 1 lệnh, không cần đợi có dữ liệu.
-
----
-
-## 8. Nếu chuyển Pha 1 (làm sạch) sang Người A
-
-**Không block — nhưng chỉ khi làm thêm 3 việc ở M0.** Và có một cái bẫy về nội dung
-quan trọng hơn chuyện block.
-
-### Bẫy: Pha 1 không thuần tuý là "làm sạch"
-
-Nó trộn hai loại việc có bản chất khác hẳn nhau:
-
-| | Việc | Cần biết gì | Ai nên làm |
-|---|---|---|---|
-| **1a** | khử trùng lặp · loại giá trị âm · loại spike ngoài ngưỡng vật lý · phát hiện gap · ép kiểu · chuẩn hoá timestamp | **hiểu dữ liệu API sinh ra lỗi gì** | **A** — vì A viết Collector, A biết rõ nhất |
-| **1b** | trung bình trượt 24h cho PM2.5/PM10 · kiểm tra độ đầy đủ dữ liệu trong cửa sổ · nội suy điểm thiếu | **hiểu chuẩn QĐ 1459 yêu cầu cửa sổ nào** | **B** — vì đây là yêu cầu của công thức AQI |
-
-Nhóm **1b không phải làm sạch, nó là chuẩn bị đầu vào cho công thức AQI**. Chuẩn VN quy định
-PM2.5/PM10 tính trên trung bình 24 giờ và cửa sổ phải đủ số giờ hợp lệ tối thiểu mới được coi là có giá trị.
-Nếu A viết phần này mà không nắm chuẩn, kết quả sẽ **sai một cách âm thầm** — số vẫn ra, biểu đồ vẫn đẹp,
-nhưng AQI sai và không ai phát hiện cho đến lúc bảo vệ.
-
-### Ba phương án
-
-| | Cách chia | Ưu | Nhược |
-|---|---|---|---|
-| **1** | Pha 1 → A **toàn bộ** | A gọn một mảng | Rủi ro 1b sai âm thầm; A phải học cả PySpark trong khi đang gánh 6 service Docker |
-| **2** ⭐ | **1a → A, 1b → B** | Logic nghiệp vụ ở đúng người hiểu nó; A vẫn được tiếp cận Spark | Phải tách file, thêm 1 mục hợp đồng |
-| **3** | Giữ Pha 1 cho B, **chuyển `streaming_aqi.py` sang A** | Không đụng vào chuỗi phụ thuộc; A đã sở hữu Kafka + HBase nên job này chủ yếu là "đấu nối" | B vẫn nặng phần phân tích |
-
-**Đề xuất: phương án 2.** Chia theo *bản chất công việc*, không theo *tên pha*.
-
-```
-/raw ──▶ phase1a_clean.py (A) ──▶ /clean ──▶ phase1b_window.py (B) ──▶ /ready ──▶ phase2_aqi.py (B)
-         kỹ thuật, không cần                  nghiệp vụ, bám chuẩn
-         biết chuẩn AQI                       QĐ 1459
-```
-
-### Ba việc phải làm thêm ở M0 để không block
-
-**1. Thêm mục `C2b` vào `CONTRACTS.md` — schema parquet của `/clean`.**
-Hiện hợp đồng có C1 (message thô) và C3 (sau Pha 2), **chưa có schema của `/clean`** — trước đây
-không cần vì Pha 1 và Pha 2 cùng một người. Giờ nó thành biên giới giữa 2 người → bắt buộc phải chốt.
-Tối thiểu: tên cột, kiểu, cột nào cho phép null, và **cột `qc_flag`** (`ok` / `interpolated` /
-`outlier_removed`) để B biết bản ghi nào tin được, và để báo cáo có số liệu chất lượng dữ liệu.
-
-**2. Commit `data/samples/clean_sample.parquet`.**
-Đúng trò cũ đã dùng với `air_quality_sample.jsonl`: B phát triển 1b + Pha 2 trên file mẫu này,
-không phải chờ A viết xong 1a.
-
-**3. Sửa quy ước "vùng cấm" trong `WORKPLAN.md`.**
-Quy ước hiện tại chia theo **thư mục** (*A không sửa `spark/`*) → gãy khi A phải viết file trong
-`spark/jobs/`. Đổi sang chia theo **file**:
-
-| File | Chủ |
-|---|---|
-| `spark/jobs/phase1a_clean.py` | A |
-| `spark/jobs/phase1b_window.py` | B |
-| `spark/jobs/phase2_aqi.py`, `phase3_aggregate.py`, `streaming_aqi.py` | B |
-| `spark/aqi_core/**` | B — **A không sửa, kể cả một dòng** |
-| `spark/requirements.txt` | chung, báo trước khi sửa |
-
-### Chi phí ẩn cần cân nhắc
-
-A sẽ phải dựng môi trường PySpark và học DataFrame API, **trong khi đang gánh phần nặng nhất về vận hành**
-(6 service Docker trên WSL2, HBase hay chết, ZooKeeper khó debug). Nếu A chưa quen Spark,
-đây có thể là thứ làm chậm cả tiến độ chung.
-
-Nếu lo điều đó: chọn **phương án 3** — giữ nguyên Pha 1 cho B, chuyển `streaming_aqi.py` sang A.
-Job đó chủ yếu là đấu nối Kafka → HBase (hai thứ A đã sở hữu), phần tính toán chỉ là một lời gọi
-`aqi_core`, nên A tiếp cận Spark ở mức nhẹ hơn nhiều.
-
----
-
-## 9. Bắt đầu
+Cần Python 3.10 trở lên và Java 17 (PySpark 3.5 cần JVM).
 
 ```bash
-cp .env.example .env          # điền OWM_API_KEY
+cd spark
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pytest                                   # 97 test
 
-# Người A:
-cd docker && docker compose up -d
-bash ../scripts/01_create_topics.sh
-
-# Người B (không cần Docker):
-cd spark && pip install -r requirements.txt && pytest
-python jobs/phase1_clean.py --input ../data/samples/air_quality_sample.jsonl --output /tmp/clean
+python jobs/phase1_clean.py --input ../data/samples/air_quality_sample.jsonl --output /tmp/aqi_clean
+python jobs/phase2_aqi.py   --input /tmp/aqi_clean --output /tmp/aqi_aqi
+python jobs/phase3_aggregate.py --input /tmp/aqi_aqi --output /tmp/aqi_agg
 ```
 
-Đọc `WORKPLAN.md` để biết việc của mình ở milestone hiện tại.
-
-## 10. Môi trường
-
-Phiên bản service theo Bảng 1 của *Thiết kế hệ thống v1*.
-**Máy nào dựng Docker thì đọc đúng mục của máy đó.**
-
-### Windows 11 + WSL2 + Ubuntu 24.04 + Docker Desktop
-
-> **Cấp RAM cho WSL2** trước khi chạy: tạo `C:\Users\<user>\.wslconfig` với `memory=10GB`.
-> HBase + HDFS + Spark + Kafka cùng lúc rất dễ OOM ở mặc định.
-
-### macOS
+### 7.2. Toàn bộ hệ thống (Docker, khuyến nghị Windows + WSL2)
 
 ```bash
-uname -m
+cp .env.example .env                     # điền OWM_API_KEY
+docker compose --env-file .env -f docker/docker-compose.yml up -d
+bash scripts/01_create_topics.sh
+bash scripts/02_init_hdfs.sh
+bash scripts/03_init_hbase.sh
 ```
 
-- `x86_64` (Mac Intel) → giống Linux thường, không có gì đặc biệt.
-- `arm64` (Apple Silicon M-series) → **đọc `docs/ARM64-APPLE-SILICON.md` TRƯỚC khi viết
-  `docker-compose.yml`.** Phần lớn image Hadoop/HBase chỉ có bản amd64; chạy giả lập thì chậm
-  và HBase hay chết vặt. File đó hướng dẫn cách tự build image chạy native trên arm64.
+Sau đó chạy các job theo [docs/huong-dan-chay.md](docs/huong-dan-chay.md). Các địa chỉ để kiểm tra:
+FastAPI `http://localhost:8000/docs`, Grafana `http://localhost:3000`, HDFS `http://localhost:9870`,
+HBase `http://localhost:16010`, Spark master `http://localhost:8080`.
 
-Cấp RAM: **Docker Desktop → Settings → Resources** → Memory ≥ 10 GB, CPU ≥ 4.
-Mục `.wslconfig` ở trên **không áp dụng cho Mac**.
+## 8. Máy nào chạy được phần nào
 
-## Tài liệu gốc
+| Phần | macOS (Apple Silicon) | Windows 11 + WSL2 + Docker Desktop |
+|---|---|---|
+| Unit test (`pytest`), Spark `local[*]` trên dữ liệu mẫu | chạy được | chạy được |
+| Đo scalability (`spark/experiments/`) | chạy được | chạy được |
+| Phân cụm, dự báo trên dữ liệu mẫu | chạy được | chạy được |
+| Kafka, HDFS, HBase, FastAPI, Grafana (`docker compose`) | không chạy | chạy được |
+| Backfill 5 năm, Pha 1→3 trên dữ liệu thật, streaming, phân cụm và dự báo trên dữ liệu thật | không chạy | chạy được |
 
-- `Phân tích từ paper.docx` — khảo cứu, chọn El Fazziki et al. (2015)
-- `Thiết kế hệ thống_v1.docx` — kiến trúc streaming, phiên bản service, quy ước
+Lý do: image Hadoop và HBase dùng trong compose (`bde2020/*`) chỉ có bản amd64, nên trên chip Apple Silicon
+phải chạy giả lập, chậm và HBase hay chết vặt; phần code Spark thì không phụ thuộc kiến trúc CPU. Cấu hình
+cần thiết cho máy chạy Docker (RAM cấp cho WSL2, các tham số đã chỉnh, cách kiểm tra kết nối HBase–HDFS)
+nằm ở [docs/cai-dat.md](docs/cai-dat.md).
+
+## 9. Tài liệu khác
+
+- [CONTRACTS.md](CONTRACTS.md): schema và giao diện giữa các thành phần
+- [docs/cai-dat.md](docs/cai-dat.md): cài đặt, cấu hình, kết nối và tham số
+- [docs/huong-dan-chay.md](docs/huong-dan-chay.md): lệnh chạy từng bước
+- [docs/experiments.md](docs/experiments.md): số liệu thực nghiệm
+- [docs/report/](docs/report/): báo cáo Word của phần thu thập dữ liệu
+- [data/samples/README.md](data/samples/README.md): cách dữ liệu mẫu được hiệu chỉnh
