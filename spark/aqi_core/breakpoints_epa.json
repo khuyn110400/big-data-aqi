@@ -26,10 +26,10 @@
   "pollutants": {
     "pm2_5": {"window": "24h", "bp": [0.0, 9.0, 35.4, 55.4, 125.4, 225.4, 325.4]},
     "pm10":  {"window": "24h", "bp": [0, 54, 154, 254, 354, 424, 604]},
-    "o3":    {"window": "8h",  "bp": [0, 108, 140, 170, 210, 400, 600], "_todo": "cần quy đổi ppb->µg/m3 cho đúng"},
-    "no2":   {"window": "1h",  "bp": [0, 100, 189, 677, 1221, 2349, 3853], "_todo": "kiểm tra quy đổi"},
-    "so2":   {"window": "1h",  "bp": [0, 92, 197, 484, 797, 1583, 2631], "_todo": "kiểm tra quy đổi"},
-    "co":    {"window": "8h",  "bp": [0, 5038, 10763, 14198, 17633, 34694, 57708], "_todo": "kiểm tra quy đổi"}
+    "o3":    {"window": "8h",  "bp": [0, 108, 140, 170, 210, 400, 600], "_note": "chưa kiểm tra quy đổi từ ppb sang µg/m3"},
+    "no2":   {"window": "1h",  "bp": [0, 100, 189, 677, 1221, 2349, 3853], "_note": "chưa kiểm tra quy đổi đơn vị"},
+    "so2":   {"window": "1h",  "bp": [0, 92, 197, 484, 797, 1583, 2631], "_note": "chưa kiểm tra quy đổi đơn vị"},
+    "co":    {"window": "8h",  "bp": [0, 5038, 10763, 14198, 17633, 34694, 57708], "_note": "chưa kiểm tra quy đổi đơn vị"}
   },
   "_bp_format": "bp[i] -> bp[i+1] ánh xạ sang aqi_breakpoints[i]."
 }

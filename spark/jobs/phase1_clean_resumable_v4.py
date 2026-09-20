@@ -2,7 +2,7 @@
 """
 Pha 1 (làm sạch) bản chịu lỗi: chạy theo từng giai đoạn, có thể chạy tiếp khi bị ngắt.
 
-Đây là bản dùng để chạy trên toàn bộ ~8,7 triệu bản ghi. Ngữ nghĩa làm sạch giống phase1_clean.py
+Đây là bản dùng để chạy trên toàn bộ ~8,58 triệu bản ghi. Ngữ nghĩa làm sạch giống phase1_clean.py
 (cùng cách loại ngoại lai, cùng luật nội suy tối đa 3 giờ), nhưng tách thành các job Spark riêng
 để giai đoạn nào xong rồi thì dùng lại được:
   grid         raw -> lưới giờ liên tục đã loại ngoại lai (checkpoint)
