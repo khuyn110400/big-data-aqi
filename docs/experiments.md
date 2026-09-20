@@ -1,12 +1,13 @@
 # Kết quả thực nghiệm
 
-> NGƯỜI B điền ở M4. Phần này quyết định điểm "vì sao cần big data" của đồ án.
+Tài liệu này ghi các số liệu đo được và giới hạn của từng phép đo. Phần scalability (§2) là bằng chứng cho câu hỏi
+"vì sao cần xử lý phân tán"; các phần khác ghi rõ số nào đo trên dữ liệu thật, số nào đo trên dữ liệu mẫu sinh giả.
 
 ## 1. Quy mô dữ liệu thu thập
 
 Nguồn: `docs/report/Big_Data_AQI_Task_A_Data_Platform_FINAL.docx` §3.3 (audit tầng raw sau khi backfill
-hoàn tất, trước lần chạy Pha 1→2→3 của tag `final-run-stable`). A kết luận "không cần chạy
-lại full backfill", nên số liệu này áp dụng cho cả raw dùng trong lần chạy final.
+hoàn tất, trước lần chạy Pha 1→2→3 ở phiên bản mã có tag git `final-run-stable`). Báo cáo đó kết luận không cần
+chạy lại toàn bộ backfill, nên số liệu này áp dụng cho cả dữ liệu raw dùng trong lần chạy cuối.
 
 | Chỉ tiêu | Giá trị |
 |---|---|
@@ -14,7 +15,7 @@ lại full backfill", nên số liệu này áp dụng cho cả raw dùng trong 
 | Khoảng thời gian | 2021-09-01 → 2026-09-01 (21 cửa sổ ~90 ngày, 21/21 hoàn tất) |
 | Tổng bản ghi thô | 8.576.904 (97,80% của kỳ vọng 8.769.408; source gap 192.504 = 2,20%, xác nhận là thiếu dữ liệu nguồn OpenWeather, không phải lỗi pipeline) |
 | Dung lượng raw (.jsonl.gz) | 279,4 MB (21.805 file) |
-| Dung lượng sau Pha 2 (parquet) | *(chưa có — cần A chạy `hdfs dfs -du -s -h /air-quality/aqi`, xem `docs/B_TO_A_RUNBOOK.md` mục 1)* |
+| Dung lượng sau Pha 2 (parquet) | *(chưa có — cần chạy `hdfs dfs -du -s -h /air-quality/aqi`, xem `docs/huong-dan-chay.md` bước 1)* |
 | Thời gian backfill | *(không đo được — docx không ghi elapsed time; quá trình backfill bị ngắt và chạy lại nhiều lượt `--resume` cách nhau không rõ khoảng thời gian, nên "chạy liên tục mất bao lâu" không còn ý nghĩa rõ ràng)* |
 | Số API call đã dùng | ≥ 4.200 (ước tính lý thuyết: 200 trạm × 21 cửa sổ, mỗi cửa sổ đúng 1 call nếu không lỗi) — **không phải số đo thực**, vì `call_count` tăng ở CẢ lần gọi bị lỗi phải retry (`owm_client.py`), và mỗi lượt `--resume` khởi tạo `OwmClient` mới nên bộ đếm reset về 0 mỗi lần chạy lại. Docx chỉ ghi được `api_calls_this_run=4.000` của đúng lượt `--resume` cuối, không phải tổng cộng dồn. |
 
@@ -58,12 +59,12 @@ OpenWeather — KHÔNG phải AQI của đồ án (xem README §1), chỉ dùng 
 
 | Mức AQI tự tính (VN_1459) | Số bản ghi | owm_aqi tương ứng (mode) | Khớp? |
 |---|---|---|---|
-| Tốt (1) | 7.522 | 1 | ✅ Khớp |
-| Trung bình (2) | 1.490 | 3 | ❌ Lệch — owm_aqi cao hơn 1 bậc |
-| Kém (3) | 585 | 4 | ❌ Lệch — owm_aqi cao hơn 1 bậc |
-| Xấu (4) | 423 | 5 | ❌ Lệch — owm_aqi cao hơn 1 bậc |
-| Rất xấu (5) | 101 | 5 | ⚠️ owm_aqi đã kịch trần (max=5), không phân biệt được 5 vs 6 |
-| Nguy hại (6) | 7 | 5 | ⚠️ owm_aqi đã kịch trần (max=5) |
+| Tốt (1) | 7.522 | 1 | Khớp |
+| Trung bình (2) | 1.490 | 3 | Lệch — owm_aqi cao hơn 1 bậc |
+| Kém (3) | 585 | 4 | Lệch — owm_aqi cao hơn 1 bậc |
+| Xấu (4) | 423 | 5 | Lệch — owm_aqi cao hơn 1 bậc |
+| Rất xấu (5) | 101 | 5 | owm_aqi đã chạm trần (max=5), không phân biệt được mức 5 và 6 |
+| Nguy hại (6) | 7 | 5 | owm_aqi đã chạm trần (max=5) |
 
 **Nhận xét:** `owm_aqi` chỉ khớp tốt ở mức "Tốt" — từ mức "Trung bình" trở lên, OpenWeather có
 xu hướng đánh giá nghiêm trọng hơn 1 bậc so với thang VN_1459 (2 thang đo dùng breakpoint
@@ -93,9 +94,9 @@ và đánh dấu `missing` — không bịa số liệu qua khối gap dài.
 
 ## 5. Nhánh mở rộng M4 — Phân cụm & Dự báo
 
-**Số liệu chính thức**, đo trên dữ liệu thật (200 trạm, xem §1) sau khi Người A chạy Pha 1→2→3
-và chạy `ext_clustering.py` / `ext_forecast.py` trên toàn bộ `/air-quality/aqi/` (tag
-`final-run-stable`, theo đúng lệnh trong `docs/B_TO_A_RUNBOOK.md` mục 4). Kết quả xuất ra
+**Số liệu chính thức**, đo trên dữ liệu thật (200 trạm, xem §1) sau khi chạy Pha 1→2→3
+và chạy `ext_clustering.py` / `ext_forecast.py` trên toàn bộ `/air-quality/aqi/` (phiên bản mã có tag git
+`final-run-stable`, theo đúng lệnh trong `docs/huong-dan-chay.md` bước 4). Kết quả xuất ra
 `final_results/json/ext_clusters.json` (sinh 2026-09-20T00:49:20Z) và
 `ext_forecast_backtest.json` (sinh 2026-09-20T01:17:08Z), phục vụ qua `/ext/clusters` và
 `/ext/forecast` (CONTRACTS.md §C8). Thay cho bản đo trên `data/samples/` (5 trạm, ~4 tháng, dữ
