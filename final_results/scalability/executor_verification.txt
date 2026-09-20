@@ -1,0 +1,9 @@
+rows=100000 requested_executors=1 actual_executors=1
+rows=100000 requested_executors=2 actual_executors=2
+rows=100000 requested_executors=4 actual_executors=4
+rows=1000000 requested_executors=1 actual_executors=1
+rows=1000000 requested_executors=2 actual_executors=2
+rows=1000000 requested_executors=4 actual_executors=4
+rows=8000000 requested_executors=1 actual_executors=1
+rows=8000000 requested_executors=2 actual_executors=2
+rows=8000000 requested_executors=4 actual_executors=4

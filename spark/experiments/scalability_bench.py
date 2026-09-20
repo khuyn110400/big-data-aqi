@@ -2,9 +2,11 @@
 Thực nghiệm scalability: đo thời gian chạy Pha 2 theo kích thước dữ liệu và số executor.
 
 Đo Pha 2 (compute_iaqi_hour, phần tốn CPU nhất: UDF Nowcast và iaqi_hour trên từng dòng) với
-3 kích thước dữ liệu x 3 số executor. Dùng `local[N]` làm đại diện cho số executor (không có
-cluster nhiều máy thật: N luồng trên một máy). Máy đo có 8 core vật lý nên local[1], [2], [4]
-không bị quá tải.
+3 kích thước dữ liệu x 3 số executor. Mặc định dùng `local[N]` làm đại diện cho số executor (N
+luồng trên một máy, chỉ để phát triển). Muốn đo với executor thật thì đặt biến môi trường
+SCALABILITY_SPARK_MASTER (ví dụ spark://spark-master:7077) và giới hạn số executor bằng
+spark.cores.max; kết quả chính thức được đo theo cách này bằng scripts/run_scalability_distributed.sh
+(Spark Standalone, 4 worker 1 core trên cùng một máy Docker, chứ không phải cụm nhiều máy).
 
 Dữ liệu được sinh trực tiếp bằng Spark (spark.range và F.rand), không ghi file JSON trung gian:
 mục đích là đo chi phí tính toán (UDF, window) của Pha 2, không lẫn với chi phí đọc file. Vì
@@ -71,7 +73,7 @@ def make_synthetic_df(spark, n_rows: int, n_stations: int = N_STATIONS):
 def run_once(n_rows: int, n_executors: int) -> float:
     spark = (
         SparkSession.builder.appName(f"bench_{n_rows}_{n_executors}ex")
-        .master(f"local[{n_executors}]")
+        .master(os.environ.get("SCALABILITY_SPARK_MASTER", f"local[{n_executors}]"))
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.shuffle.partitions", str(max(4, n_executors * 4)))
         .config("spark.ui.enabled", "false")
