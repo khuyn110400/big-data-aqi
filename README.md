@@ -298,8 +298,8 @@ Chi tiết, kèm các hạn chế của từng phép đo, ở [docs/experiments.
 Một số hạn chế cần biết khi đọc các con số trên (giải thích đầy đủ trong `docs/experiments.md`):
 scalability đo bằng `local[N]` trên một máy chứ không phải cụm nhiều máy; Random Forest chạy với tham số
 nhỏ hơn thiết kế (`num_trees=20`, `max_depth=5`) do giới hạn bộ nhớ trên driver; tập test của CNN-LSTM
-nhỏ hơn hai tầng còn lại nên không so sánh trực tiếp được; bảng so sánh đầy đủ 5 thuật toán phân cụm
-trên dữ liệu thật chưa được lưu lại.
+nhỏ hơn hai tầng còn lại nên không so sánh trực tiếp được; bảng so sánh 5 thuật toán phân cụm không được
+lưu ở lần chạy gốc nên được tái tạo lại từ file kết quả, và K-means chỉ hơn Bisecting K-means 0,015 silhouette.
 
 ## 7. Chạy thử
 

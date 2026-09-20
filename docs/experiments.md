@@ -109,12 +109,34 @@ liệu sinh giả) ở các lần đo trước.
 | **K-means** | k=3 | 3 | **0.3547** |
 
 `compare_clustering_algorithms()` chạy cả 5 thuật toán (K-means, GMM, Bisecting K-means,
-DBSCAN, HDBSCAN) và chọn theo silhouette Euclidean chung (xem cách đo ở lần chạy trên dữ liệu
-mẫu bên dưới). **Hạn chế cần nêu rõ:** `export_clusters_json()` chỉ ghi lại kết quả của thuật
-toán thắng, không ghi bảng so sánh đầy đủ; log console (nơi in bảng `=== Tổng kết ===` của cả 5
-thuật toán) không được lưu lại. Vì vậy không biết K-means thắng sát nút hay cách biệt các thuật
-toán còn lại bao nhiêu trên dữ liệu thật — **cần sửa `export_clusters_json` để ghi thêm bảng so
-sánh, rồi chạy lại** (rẻ: chỉ 2.400 dòng, không cần chạy lại Pha 1-3).
+DBSCAN, HDBSCAN) và chọn thuật toán có silhouette Euclidean cao nhất (cách đo xem ở phần "Đính
+chính" bên dưới). Lần chạy gốc không lưu lại bảng so sánh: log console (bảng `=== Tổng kết ===`)
+không được giữ và `export_clusters_json()` chỉ ghi kết quả của thuật toán thắng.
+
+**Bảng so sánh dưới đây được tái tạo sau đó, không phải log của lần chạy gốc.** 2.400 dòng `rows`
+của `final_results/json/ext_clusters.json` (200 thành phố × 12 tháng) chính là bảng feature đầu
+vào của bước phân cụm; nạp chúng vào một DataFrame Spark (cột `city`, `country`, `month`, `lat`,
+`lon`, `avg_pm2_5`, `avg_pm10`, `avg_o3`, `avg_no2`) rồi gọi lại `compare_clustering_algorithms()`
+(seed 42). Số liệu đầu vào đã làm tròn 4 chữ số, nhưng silhouette của K-means tái tạo được là
+0.3547, trùng với giá trị trong file JSON.
+
+| Thuật toán | Tham số được chọn | Số cụm | Nhiễu | Silhouette |
+|---|---|---|---|---|
+| **K-means** | k=3 | 3 | 0% | **0.3547** |
+| Bisecting K-means | k=2 | 2 | 0% | 0.3398 |
+| DBSCAN | eps=1.5, min_samples=5 | 6 | 1% | 0.3140 |
+| GMM | k=2 | 2 | 0% | 0.2214 |
+| HDBSCAN | không có cấu hình hợp lệ | — | — | — |
+
+Đọc bảng này cần lưu ý:
+- K-means hơn Bisecting K-means chỉ 0.015 (0.3547 so với 0.3398), tức thắng sát chứ không cách
+  biệt. Không nên viết K-means "vượt trội".
+- HDBSCAN bị loại vì không cấu hình nào thoả ràng buộc ≤ 6 cụm và nhiễu ≤ 20% (xem ràng buộc ở
+  cuối mục này). Nếu bỏ ràng buộc thì `min_cluster_size=2` cho silhouette 0.3632 nhưng với 598
+  cụm và 17% nhiễu, tức chia thành hàng trăm cụm nhỏ, không có ý nghĩa thực tế; đây chính là hiện
+  tượng ràng buộc được đặt ra để chặn.
+- Không rõ người chạy có dùng tham số `--k` hay không. Kết quả không phụ thuộc vào điều đó: chạy
+  tự chọn k thì K-means cũng ra k=3 và vẫn thắng cả 4 thuật toán còn lại.
 
 **Đánh giá theo thang chuẩn (Kaufman & Rousseeuw):** 0.3547 rơi vào khoảng 0.26–0.50, tức
 **"cấu trúc yếu"** — cụm có tồn tại nhưng không tách biệt rõ ràng, không đạt mức "tốt" (>0.5)
